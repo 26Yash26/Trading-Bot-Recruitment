@@ -14,7 +14,12 @@ jobs:
           host: ${{ secrets.GCP_HOST }}
           username: ${{ secrets.GCP_USERNAME }}
           key: ${{ secrets.GCP_SSH_KEY }}
+          script_stop: true
           script: |
+            whoami
+            pwd
             cd /var/www/html
+            pwd
             git fetch origin main
             git reset --hard origin/main
+            git log -1
