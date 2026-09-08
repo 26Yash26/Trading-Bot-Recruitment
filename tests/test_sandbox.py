@@ -7,6 +7,8 @@ Each one is a thing a participant could actually submit.
 
 from __future__ import annotations
 
+import sys
+
 import pytest
 
 from sandbox.policy import check_source, describe
@@ -26,6 +28,12 @@ OBS = {
 @pytest.fixture
 def run_bot(tmp_path):
     """Run one source string in the sandbox and return (bid, error, handle)."""
+    if sys.platform == "win32":
+        # The sandbox child talks to its parent over a subprocess pipe read with
+        # select() and killed with process groups -- both POSIX-only. The sandbox
+        # only ever runs on Linux (CI + the VM); the AST-policy tests below still
+        # run here.
+        pytest.skip("sandbox child-process IPC is POSIX-only")
     created = []
 
     def _run(source: str, **limit_kwargs):
