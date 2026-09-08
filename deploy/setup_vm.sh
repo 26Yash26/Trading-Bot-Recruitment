@@ -173,9 +173,24 @@ else
 fi
 
 # --- belt and braces ---------------------------------------------------------
+# The API runs as $SVC_USER, but the checkout is owned by the deploy user, so
+# $SVC_USER reads the code as "other". Stripping the "other" bits below would
+# then hide the very modules it imports (harness, src, ...). Give the service
+# group read+traverse on the checkout first, so it reaches the code through the
+# owner's group instead — then dropping "other" only shuts out the public.
+log "service read access to the checkout"
+OWNER_GROUP=$(stat -c %G "$REPO")
+if [[ -n "$OWNER_GROUP" && "$OWNER_GROUP" != "$SVC_USER" ]]; then
+    usermod -aG "$OWNER_GROUP" "$SVC_USER"
+    ok "$SVC_USER added to group $OWNER_GROUP (reads the checkout via group)"
+fi
+chmod -R g+rX "$REPO"
+ok "group can read+traverse $REPO"
+
 # Even with the nginx allowlist, drop the "other" bits on organiser-only paths so
 # a future config mistake cannot re-expose them. Directory modes survive
 # `git reset --hard`, and git runs as the checkout owner, so deploys still work.
+# The service still reads these through its group (granted just above).
 log "filesystem hardening"
 cd "$REPO"
 for p in .git .github secret harness tests docs server sandbox scripts deploy conftest.py; do
