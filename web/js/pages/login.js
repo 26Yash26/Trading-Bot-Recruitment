@@ -4,6 +4,7 @@
 // and redirects — no token ever passes through the URL or through JS.
 
 import { navigate, store } from "../main.js";
+import { revealLines } from "../motion.js";
 import { esc, toast } from "../ui.js";
 
 const DENIAL_REASONS = {
@@ -42,45 +43,50 @@ export async function renderLogin(app) {
   const configured = store.me.oauth_configured !== false;
 
   app.innerHTML = `
-    <section class="mx-auto grid min-h-[70vh] max-w-md place-items-center px-5 py-16">
-      <div class="panel panel-glow w-full p-8">
-        <div class="flex flex-col items-center gap-3 text-center">
-          <span class="grid h-12 w-12 place-items-center rounded-2xl border border-gold/40 bg-gold/10
-                       font-heading text-lg font-bold text-gold">Q</span>
-          <h1 class="font-heading text-xl font-bold">Sign in to compete</h1>
-          <p class="text-sm text-ink-dim">
-            Only <span class="font-mono text-gold">@smail.iitm.ac.in</span> accounts can submit a bot.
-            The leaderboard is open to everyone.
-          </p>
-        </div>
+    <section class="bleed grid min-h-[70vh] items-center gap-14 py-20 lg:grid-cols-2" data-reveal>
+      <div class="max-w-lg">
+        <span class="tag" data-fade>Sign in</span>
+        <h1 class="d1 mt-8 font-display">${revealLines(["The board", "is open."])}</h1>
+        <p class="lede mt-10" data-fade>
+          Anyone can read the leaderboard and the problem statement. To upload a bot you need an
+          <span class="font-mono text-flame">@smail.iitm.ac.in</span> account, because a submission
+          has to be bound to a roll number that belongs to a real person.
+        </p>
+        <ul class="mt-10 space-y-4 text-sm text-ink-2" data-fade>
+          <li class="flex gap-3"><span class="text-flame">▸</span>We read your name and email address, and nothing else.</li>
+          <li class="flex gap-3"><span class="text-flame">▸</span>Your roll number is taken from the address, not typed in.</li>
+          <li class="flex gap-3"><span class="text-flame">▸</span>The session is a cookie the page itself cannot read.</li>
+        </ul>
+      </div>
 
+      <div class="panel p-8 lg:justify-self-end lg:w-full lg:max-w-md" data-fade>
         ${
           configured
             ? `<a href="/api/auth/login"
-                  class="mt-8 flex w-full items-center justify-center gap-3 rounded-xl border border-line-bright
-                         bg-white px-4 py-3 text-sm font-semibold text-[#1f2328] transition-all
-                         hover:-translate-y-0.5 hover:shadow-lg">
+                  class="flex w-full items-center justify-center gap-3 border border-line-2 bg-white
+                         px-5 py-4 font-mono text-[11px] uppercase tracking-[0.18em] text-[#1f2328]
+                         transition-colors hover:border-flame">
                  ${googleMark} Continue with Google
                </a>`
-            : `<div class="mt-8 rounded-xl border border-loss/35 bg-loss/10 px-4 py-3 text-sm text-loss">
-                 Google sign-in is not configured on this server yet.
-                 Set <span class="font-mono text-xs">QG_GOOGLE_CLIENT_ID</span> and
+            : `<div class="border-l-2 border-l-loss px-5 py-4 text-sm text-loss">
+                 Google sign-in is not configured on this server yet. Set
+                 <span class="font-mono text-xs">QG_GOOGLE_CLIENT_ID</span> and
                  <span class="font-mono text-xs">QG_GOOGLE_CLIENT_SECRET</span>.
                </div>`
         }
 
-        <p class="mt-6 text-center text-xs leading-relaxed text-ink-faint">
-          We read your name, email address and nothing else — only to confirm you are at IIT Madras
-          and to bind submissions to your roll number.
+        <p class="hair mt-8 pt-6 font-mono text-[11px] leading-relaxed text-ink-3">
+          Only the <span class="text-flame">smail.iitm.ac.in</span> domain is accepted. A personal
+          Gmail address is turned away by Google before it ever reaches this site.
         </p>
-      </div>
 
-      ${
-        reason && auth === "denied"
-          ? `<p class="mt-5 max-w-sm text-center font-mono text-xs text-loss">${esc(
-              DENIAL_REASONS[reason] || reason
-            )}</p>`
-          : ""
-      }
+        ${
+          reason && auth === "denied"
+            ? `<p class="mt-5 font-mono text-[11px] text-loss">${esc(
+                DENIAL_REASONS[reason] || reason
+              )}</p>`
+            : ""
+        }
+      </div>
     </section>`;
 }

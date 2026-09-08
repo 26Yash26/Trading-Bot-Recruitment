@@ -25,6 +25,8 @@ from fastapi.staticfiles import StaticFiles
 
 from harness.validate import ROLL_RE, parse_filename, validate
 from sandbox.runner import SandboxLimits, detect_isolation
+from src.auction.capital import CapitalDraw
+from src.auction.variations import VARIATIONS
 
 from . import config, events, security, store
 from .scheduler import scheduler
@@ -203,27 +205,44 @@ def api_me(request: Request):
 # --- public data ---------------------------------------------------------------
 
 
-@app.get("/api/state")
-def api_state():
+def public_state() -> dict:
+    """Everything the site needs to draw itself, and nothing more.
+
+    Also the payload of the ``state`` server-sent event, so a setting changed in
+    the control room — which variations are in play, whether submissions are
+    open, the announcement — reaches every open tab without a reload.
+    """
     settings = store.public_settings()
     latest = store.latest_showdown()
+    num_rounds = int(settings.get("num_rounds", 2000))
+    block_size = max(1, int(settings.get("block_size", 500)))
     return {
         "now": time.time(),
         "schedule": scheduler.state(),
         "submissions_open": bool(settings.get("submissions_open", True)),
-        "variations": settings.get("variations", [1, 2, 3]),
-        "num_rounds": settings.get("num_rounds", 2000),
+        "variations": settings.get("variations", [1, 2]),
+        "num_rounds": num_rounds,
+        "block_size": block_size,
+        "num_blocks": max(1, -(-num_rounds // block_size)),
         "group_size": settings.get("group_size", 20),
-        "repeats": settings.get("repeats", 3),
-        "max_bid": settings.get("max_bid", 100.0),
-        "starting_capitals": settings.get("starting_capitals", [100.0]),
+        "iterations": settings.get("iterations", 3),
+        "grouping": settings.get("grouping", "random"),
+        # The capital draw is public: §3.1 spells the whole thing out, and only
+        # the block's hidden maximum that it scales is kept back.
+        "capital": CapitalDraw.from_settings(settings).as_dict(),
         "announcement": settings.get("announcement", ""),
         "deadline_iso": settings.get("deadline_iso", ""),
+        "submission_form_url": settings.get("submission_form_url", ""),
         "counts": store.submission_counts(),
         "last_showdown": {
             "id": latest["id"], "finished_at": latest["finished_at"], "games": latest["games"],
         } if latest else None,
     }
+
+
+@app.get("/api/state")
+def api_state():
+    return public_state()
 
 
 @app.get("/api/leaderboard")
@@ -324,6 +343,17 @@ async def api_submit(
         )
     roll, variation = parsed
 
+    # A variation that is not in play is not on the site either — the submit
+    # form will not offer it — so a file naming one is either a stale page or a
+    # hand-crafted request. Both deserve the same plain answer.
+    in_play = [int(v) for v in settings.get("variations", list(VARIATIONS))]
+    if variation not in in_play:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Variation {variation} is not in play. "
+            f"Currently accepted: {', '.join(f'variation {v}' for v in in_play) or 'none'}.",
+        )
+
     tmp_dir = config.DATA_DIR / "tmp"
     tmp_dir.mkdir(parents=True, exist_ok=True)
     tmp_path = tmp_dir / f"{secrets.token_hex(8)}.py"
@@ -340,8 +370,7 @@ async def api_submit(
                 filename, source, tmp_path,
                 expected_roll=expected_roll,
                 block_bounds=settings.get("block_bounds"),
-                max_bid=float(settings.get("max_bid", 100.0)),
-                starting_capital=float(settings.get("starting_capitals", [100.0])[0]),
+                capital_draw=CapitalDraw.from_settings(settings),
                 limits=limits,
             ),
         )
@@ -398,6 +427,27 @@ def admin_settings(admin: dict = Depends(require_admin)):
     }
 
 
+def normalise_variations(value: object) -> list[int]:
+    """A non-empty subset of the three variations, in order.
+
+    The switchboard in the admin console decides what the whole site shows, so
+    an empty or malformed list here would leave participants with a page that
+    describes no game at all. Refuse it at the door rather than storing it.
+    """
+    if not isinstance(value, list):
+        raise HTTPException(status_code=400, detail="variations must be a list.")
+    # `bool` is an `int` in Python and `True` would quietly become variation 1.
+    if any(not isinstance(item, int) or isinstance(item, bool) for item in value):
+        raise HTTPException(status_code=400, detail="variations must be whole numbers.")
+    chosen = sorted(set(value))
+    if not chosen or any(item not in VARIATIONS for item in chosen):
+        raise HTTPException(
+            status_code=400,
+            detail="Pick at least one variation, out of 1, 2 and 3.",
+        )
+    return chosen
+
+
 @app.patch("/api/admin/settings")
 async def admin_update_settings(request: Request, admin: dict = Depends(require_admin)):
     security.require_same_origin(request)
@@ -405,12 +455,16 @@ async def admin_update_settings(request: Request, admin: dict = Depends(require_
     if not isinstance(changes, dict):
         raise HTTPException(status_code=400, detail="Expected a JSON object.")
 
+    if "variations" in changes:
+        changes["variations"] = normalise_variations(changes["variations"])
+
     settings = store.update_settings(changes)
     store.audit(admin["email"], "settings", ", ".join(sorted(changes)))
 
     if "interval_minutes" in changes:
         scheduler.reschedule()
     events.publish("schedule", scheduler.state())
+    events.publish("state", public_state())
     return {"ok": True, "settings": settings, "schedule": scheduler.state()}
 
 

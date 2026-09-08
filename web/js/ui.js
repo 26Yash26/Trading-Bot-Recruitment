@@ -1,4 +1,5 @@
-// Small DOM helpers shared by every page.
+// Formatting, escaping, and the four variations. No DOM choreography — that
+// lives in motion.js.
 //
 // Rule for this codebase: markup is built from template strings, and *every*
 // value that came from a person (a name, a roll number, a rejection message the
@@ -15,6 +16,8 @@ export const esc = (value) =>
 
 export const $ = (selector, root = document) => root.querySelector(selector);
 export const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+
+// --- numbers -------------------------------------------------------------------
 
 export function signed(value, digits = 2) {
   const n = Number(value) || 0;
@@ -36,6 +39,12 @@ export function compact(value) {
   return n.toFixed(0);
 }
 
+export const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
+
+export const pad2 = (n) => String(n).padStart(2, "0");
+
+// --- time ----------------------------------------------------------------------
+
 export function relativeTime(epochSeconds) {
   if (!epochSeconds) return "never";
   const delta = Date.now() / 1000 - epochSeconds;
@@ -48,17 +57,153 @@ export function relativeTime(epochSeconds) {
 export function clockParts(seconds) {
   const total = Math.max(0, Math.floor(seconds));
   return {
-    hours: String(Math.floor(total / 3600)).padStart(2, "0"),
-    minutes: String(Math.floor((total % 3600) / 60)).padStart(2, "0"),
-    seconds: String(total % 60).padStart(2, "0"),
+    days: pad2(Math.floor(total / 86400)),
+    hours: pad2(Math.floor(total / 3600)),
+    minutes: pad2(Math.floor((total % 3600) / 60)),
+    seconds: pad2(total % 60),
     total,
   };
 }
 
+/** "16 Sep, 23:59" from an ISO string; empty when the string is missing or junk. */
+export function formatDeadline(iso, { withTime = true } = {}) {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString([], {
+    day: "2-digit",
+    month: "short",
+    ...(withTime ? { hour: "2-digit", minute: "2-digit" } : {}),
+  });
+}
+
+/** Whole days from now until `iso`; null when there is no usable deadline. */
+export function daysUntil(iso) {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  return Math.ceil((date.getTime() - Date.now()) / 86_400_000);
+}
+
+export function describeInterval(minutes) {
+  const m = Number(minutes) || 0;
+  if (m <= 0) return "on demand";
+  if (m % 60 === 0) {
+    const hours = m / 60;
+    return hours === 1 ? "every hour" : `every ${hours} hours`;
+  }
+  return `every ${m} minutes`;
+}
+
+// --- the four variations -------------------------------------------------------
+
+// Class names are written out in full rather than assembled from a colour name:
+// Tailwind scans these files as text, and a class it never sees spelled out is a
+// class it never generates.
+export const VARIATION_META = {
+  1: {
+    index: "01",
+    name: "Private Value",
+    kind: "first price",
+    formula: "xᵢ − b₁",
+    ink: "text-flame",
+    edge: "border-flame",
+    rule: "bg-flame",
+    swatch: "--color-flame",
+    short: "Your own draw is the prize.",
+    detail:
+      "The winner takes their own value minus what they bid; everyone else scores zero. " +
+      "The only question is how much of your own surplus you hand over to be sure of winning it.",
+    rules: [
+      "The winner's payoff is <b>xᵢ − b₁</b>, using the winner's own value.",
+      "All other players receive zero payoff.",
+      "Tied top bids all win, and each collects the full payoff.",
+    ],
+  },
+  2: {
+    index: "02",
+    name: "Common Value",
+    kind: "first price",
+    formula: "X − b₁",
+    ink: "text-jade",
+    edge: "border-jade",
+    rule: "bg-jade",
+    swatch: "--color-jade",
+    short: "The best draw on the table is the prize.",
+    detail:
+      "X is the largest value drawn by anyone still solvent that round. Winning is worth exactly " +
+      "the same to everyone and nobody is told what that is, so this is a pure bidding contest.",
+    rules: [
+      "The winner's payoff is <b>X − b₁</b>, where X is the largest value drawn by <i>any active player</i>.",
+      "You never see X during the round. Last round's realised X is published to everyone.",
+      "Tied top bids all win, and each collects the full payoff.",
+    ],
+  },
+  3: {
+    index: "03",
+    name: "Runner-up Penalty",
+    kind: "common value",
+    formula: "X − b₁ · 2nd pays ½",
+    ink: "text-amber",
+    edge: "border-amber",
+    rule: "bg-amber",
+    swatch: "--color-amber",
+    short: "Second place is punished.",
+    detail:
+      "The same prize as variation 2, except the runner-up hands back half of what the winner " +
+      "earned. Coming close is now actively expensive, which changes what a safe bid even means.",
+    rules: [
+      "The winner's payoff is <b>X − b₁</b>, exactly as in variation 2.",
+      "The second-highest bidder pays <b>−0.5 × (X − b₁)</b>.",
+      "If X − b₁ is negative the runner-up pays nothing — the penalty never becomes a reward.",
+      "Ranks must be distinct here, so ties are broken uniformly at random.",
+    ],
+  },
+  4: {
+    index: "04",
+    name: "Funded Second Price",
+    kind: "top two, ranks 3–5 pay",
+    formula: "X − b₂ · X − b₁",
+    ink: "text-iris",
+    edge: "border-iris",
+    rule: "bg-iris",
+    swatch: "--color-iris",
+    short: "The top two are paid by ranks three to five.",
+    detail:
+      "Rank one takes X − b₂ and rank two takes X − b₁, funded in shares of 0.5, 0.3 and 0.2 by " +
+      "ranks three, four and five. Being third is strictly worse than being sixth: there is no " +
+      "safe spot just under the money.",
+    rules: [
+      "If <b>b₁ ≤ X</b>: rank 1 takes <b>X − b₂</b>, rank 2 takes <b>X − b₁</b>.",
+      "Ranks 3, 4 and 5 pay 0.5, 0.3 and 0.2 of the total the top two earned — the round is exactly zero-sum.",
+      "Fewer than five active players: the shares renormalise over the ranks that exist. Two or fewer: no penalty.",
+      "If <b>b₁ > X</b>: the highest bidder alone takes X − b₁, a loss, and nobody else is touched.",
+    ],
+  },
+};
+
+export const ALL_VARIATIONS = [1, 2, 3, 4];
+
+/**
+ * The variations the admin currently has switched on.
+ *
+ * Everything user-facing goes through this — the home page cards, the
+ * leaderboard tabs, the rules, the submit slots — so releasing variation 3 in
+ * the control room releases it on the site. Before `/api/state` has landed
+ * there is nothing to filter by; after it has, an empty list genuinely means
+ * none are in play.
+ */
+export function enabledVariations(state) {
+  if (!state || !Array.isArray(state.variations)) return [...ALL_VARIATIONS];
+  return ALL_VARIATIONS.filter((id) => state.variations.map(Number).includes(id));
+}
+
+// --- feedback ------------------------------------------------------------------
+
 const TOAST_STYLES = {
-  ok: "border-gain/45 text-gain",
-  error: "border-loss/45 text-loss",
-  info: "border-gold/45 text-gold",
+  ok: "border-gain text-gain",
+  error: "border-loss text-loss",
+  info: "border-flame text-flame",
 };
 
 export function toast(message, kind = "info", ttl = 5200) {
@@ -67,8 +212,8 @@ export function toast(message, kind = "info", ttl = 5200) {
 
   const node = document.createElement("div");
   node.className =
-    `pointer-events-auto animate-rise rounded-xl border bg-surface/95 px-4 py-3 text-sm ` +
-    `shadow-2xl backdrop-blur ${TOAST_STYLES[kind] ?? TOAST_STYLES.info}`;
+    "pointer-events-auto animate-rise border bg-void-2 px-4 py-3 font-mono text-xs " +
+    (TOAST_STYLES[kind] ?? TOAST_STYLES.info);
   node.setAttribute("role", kind === "error" ? "alert" : "status");
   node.textContent = message;
   host.appendChild(node);
@@ -81,54 +226,24 @@ export function toast(message, kind = "info", ttl = 5200) {
   }, ttl);
 }
 
-/** Count a number up to its target — used on the hero stat tiles. */
-export function animateNumber(el, to, { digits = 0, duration = 900 } = {}) {
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    el.textContent = Number(to).toFixed(digits);
-    return;
-  }
-  const from = Number(el.dataset.value || 0);
-  const start = performance.now();
-  const step = (now) => {
-    const t = Math.min(1, (now - start) / duration);
-    const eased = 1 - Math.pow(1 - t, 3);
-    el.textContent = (from + (to - from) * eased).toFixed(digits);
-    if (t < 1) requestAnimationFrame(step);
-    else el.dataset.value = String(to);
-  };
-  requestAnimationFrame(step);
-}
+// --- DOM odds and ends ---------------------------------------------------------
 
-/** Reveal elements as they scroll into view. */
-export function observeReveals(root = document) {
-  const targets = $$("[data-reveal]", root);
-  if (!targets.length) return;
-
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    targets.forEach((el) => el.classList.add("opacity-100"));
-    return;
-  }
-
-  const observer = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting) return;
-        const delay = Number(entry.target.dataset.reveal) || 0;
-        entry.target.style.animationDelay = `${delay}ms`;
-        entry.target.classList.add("animate-rise", "opacity-100");
-        observer.unobserve(entry.target);
-      });
-    },
-    { threshold: 0.12, rootMargin: "0px 0px -40px 0px" }
-  );
-  targets.forEach((el) => {
-    el.classList.add("opacity-0");
-    observer.observe(el);
+/**
+ * Apply every `data-bar-width="42"` under `root` as a real width.
+ *
+ * The Content-Security-Policy has no `'unsafe-inline'` for styles, so a `style`
+ * attribute written into a template string is dropped by the browser. Assigning
+ * through the CSSOM is a different thing entirely and is allowed, so bar widths
+ * are carried as data attributes and applied here after paint.
+ */
+export function applyBarWidths(root = document) {
+  $$("[data-bar-width]", root).forEach((el) => {
+    el.style.width = `${clamp(Number(el.dataset.barWidth) || 0, 0, 100)}%`;
   });
 }
 
-export const VARIATION_META = {
-  1: { name: "Own Value", formula: "xᵢ − bid", accent: "text-gold", ring: "border-gold/40" },
-  2: { name: "Field Max", formula: "X − bid", accent: "text-cyan", ring: "border-cyan/40" },
-  3: { name: "Runner-up Tax", formula: "X − bid, 2nd pays ½", accent: "text-violet", ring: "border-violet/40" },
-};
+/** Read a themed colour out of the stylesheet, for canvas and SVG drawing. */
+export function themeColor(name, fallback = "#000") {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+}

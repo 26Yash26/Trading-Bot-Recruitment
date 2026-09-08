@@ -18,11 +18,12 @@ from pathlib import Path
 
 from sandbox.policy import check_source, describe
 from sandbox.runner import SandboxLimits
+from src.auction.capital import CapitalDraw
 
 from .simulate import BotSpec, play_group
 
-# ROLLNO_variation.py  — e.g. ME24B152_1.py  (problem statement §7)
-FILENAME_RE = re.compile(r"^(?P<roll>[A-Z]{2}[0-9]{2}[A-Z][0-9]{3})_(?P<variation>[123])\.py$")
+# ROLLNO_variation.py  — e.g. ME24B152_1.py  (problem statement §10)
+FILENAME_RE = re.compile(r"^(?P<roll>[A-Z]{2}[0-9]{2}[A-Z][0-9]{3})_(?P<variation>[1234])\.py$")
 ROLL_RE = re.compile(r"^[A-Z]{2}[0-9]{2}[A-Z][0-9]{3}$")
 
 SMOKE_ROUNDS = 120
@@ -57,8 +58,8 @@ def validate(
     *,
     expected_roll: str = "",
     block_bounds=None,
-    max_bid: float = 100.0,
-    starting_capital: float = 100.0,
+    capital_draw: CapitalDraw | None = None,
+    block_size: int = SMOKE_ROUNDS,
     limits: SandboxLimits | None = None,
     tier: str | None = None,
 ) -> ValidationResult:
@@ -91,11 +92,11 @@ def validate(
     result = play_group(
         [BotSpec(key=roll, path=tmp_path)],
         variation=variation,
-        starting_capitals=starting_capital,
         block_bounds=block_bounds or [(0.0, 100.0)],
         seed=12345,
-        max_bid=max_bid,
         num_rounds=SMOKE_ROUNDS,
+        block_size=block_size,
+        capital_draw=capital_draw or CapitalDraw(),
         limits=limits or SandboxLimits(),
         tier=tier,
     )
@@ -111,8 +112,9 @@ def validate(
         return ValidationResult(
             ok=False,
             reason=(
-                f"Your bot ran out of capital at round {outcome.eliminated_round} of "
-                f"{SMOKE_ROUNDS} against the sample bots. It would not survive a real game."
+                f"Your bot went bankrupt at round {outcome.eliminated_round} of "
+                f"{SMOKE_ROUNDS} against the sample bots. It would forfeit the rest "
+                "of the block in a real game."
             ),
             roll=roll, variation=variation,
         )

@@ -4,35 +4,79 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Quant Guild · Trading Bot Recruitment</title>
-<meta name="description" content="Build a bidding bot, submit it, and watch it fight the field every two hours. Quant Guild recruitment, IIT Madras.">
-<meta name="theme-color" content="#07070a">
+<meta name="description" content="Write a bidding bot for a four-variation sealed-bid auction. Hidden distributions, capital redrawn every 500 rounds, a standardised leaderboard. Quant Guild recruitment, IIT Madras.">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#08080a" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f4f2ea" media="(prefers-color-scheme: light)">
 <link rel="icon" href="/web/favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/web/css/app.css">
+
+<!--
+  A classic (non-module) script, deliberately: it must run before the first
+  paint or a reader who picked the light theme gets a flash of the dark one,
+  and module scripts are always deferred. The Content-Security-Policy forbids
+  inline script, so it is a file rather than three lines in the head.
+-->
+<script src="/web/js/theme.js"></script>
 </head>
 <body>
 
-<!-- Animated trading-floor backdrop; purely decorative. -->
-<canvas id="backdrop" class="pointer-events-none fixed inset-0 -z-10 h-full w-full opacity-45" aria-hidden="true"></canvas>
-<div class="grid-backdrop pointer-events-none fixed inset-0 -z-10 opacity-25" aria-hidden="true"></div>
-<div class="hero-glow pointer-events-none fixed inset-0 -z-10" aria-hidden="true"></div>
+<!-- Decorative: column guides, a film grain, and a cursor ring that trails the
+     pointer. All three are inert, and none of them replace the real cursor. -->
+<div class="pointer-events-none fixed inset-0 -z-10 column-guides opacity-[0.55]" aria-hidden="true"></div>
+<div class="pointer-events-none fixed inset-0 -z-10 grain opacity-[0.035]" aria-hidden="true"></div>
+<div class="cursor-ring hidden" data-cursor-ring aria-hidden="true"></div>
 
-<a href="#app" class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-gold focus:px-4 focus:py-2 focus:font-semibold focus:text-void">Skip to content</a>
+<a href="#app" class="skip-link">Skip to content</a>
 
-<header id="nav" class="sticky top-0 z-40 border-b border-line/80 bg-void/80 backdrop-blur-xl"></header>
+<div id="announce"></div>
 
-<main id="app" class="min-h-[calc(100vh-8rem)]"></main>
+<header id="nav" class="sticky top-0 z-40 hair-b" aria-label="Masthead"></header>
 
-<footer class="border-t border-line/80 bg-void/60">
-  <div class="mx-auto flex max-w-6xl flex-col gap-3 px-5 py-8 text-sm text-ink-faint md:flex-row md:items-center md:justify-between">
-    <p>Quant Guild · IIT Madras — Trading Bot Recruitment, odd semester 2026.</p>
-    <p class="font-mono text-xs">Questions go to the guild WhatsApp group.</p>
+<main id="app" class="min-h-[60vh]"></main>
+
+<footer class="hair mt-24">
+  <div class="bleed py-16">
+    <div class="grid gap-12 lg:grid-cols-[1.5fr_1fr_1fr]">
+      <div>
+        <p class="d3 font-display">Quant&nbsp;Guild</p>
+        <p class="mt-5 max-w-sm text-sm leading-relaxed text-ink-2">
+          The quantitative finance and research group at IIT Madras. This site runs the
+          odd-semester 2026 recruitment auction end to end — submission, sandbox, showdown,
+          leaderboard.
+        </p>
+      </div>
+
+      <nav aria-label="Pages" class="text-sm">
+        <p class="label">Pages</p>
+        <ul class="mt-5 space-y-3">
+          <li><a href="/" data-link class="link">Home</a></li>
+          <li><a href="/leaderboard" data-link class="link">Leaderboard</a></li>
+          <li><a href="/rules" data-link class="link">Problem statement</a></li>
+          <li><a href="/submit" data-link class="link">Submit</a></li>
+        </ul>
+      </nav>
+
+      <div class="text-sm">
+        <p class="label">Resources</p>
+        <ul class="mt-5 space-y-3">
+          <li><a href="/public/starter-kit.zip" class="link" download>Starter kit (.zip)</a></li>
+          <li><span class="text-ink-2">Questions → the guild WhatsApp group</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="hair mt-14 flex flex-col gap-2 pt-6 font-mono text-[11px] text-ink-3 sm:flex-row sm:items-center sm:justify-between">
+      <p>Quant Guild · IIT Madras — odd semester 2026</p>
+      <p data-footer-status>—</p>
+    </div>
   </div>
 </footer>
 
-<div id="toasts" class="pointer-events-none fixed bottom-5 right-5 z-50 flex w-[min(24rem,calc(100vw-2.5rem))] flex-col gap-2"></div>
+<div id="toasts" class="pointer-events-none fixed bottom-6 right-6 z-50 flex w-[min(24rem,calc(100vw-3rem))] flex-col gap-2"></div>
 
 <script type="module" src="/web/js/main.js"></script>
 </body>

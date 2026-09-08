@@ -1,14 +1,14 @@
 """Wrapper around a participant's bot instance.
 
 Owns everything the engine should not care about: constructing the bot, calling
-``get_bid`` and sanitising what comes back, and tracking capital + elimination.
+``get_bid`` and sanitising what comes back, tracking capital and bankruptcy, and
+remembering what happened to this bot last round so the next observation can
+report it back.
 
-Phase 0.C (here): plain in-process calls; a returned value that is the wrong type,
-non-finite, negative, or an exception becomes an illegal bid (0). Bids above
-``max_bid`` are clamped; bids above current capital become 0 (problem statement
-rule 10).
-
-Phase 1.A: the timeout + memory + no-network sandbox goes here.
+Legality (problem statement §4.7): a bid above the player's available capital,
+below zero, not a number, or not returned in time is filed as 0 for that round.
+The legal ceiling is the player's own capital — ``max_bid`` stays as an optional
+fixed ceiling so the engine's unit tests can pin payoff arithmetic.
 """
 
 from __future__ import annotations
@@ -36,8 +36,13 @@ class Player:
         self.capital = float(starting_capital)
         self.active = self.capital > ELIMINATION_CAPITAL
         self.wins = 0
-        self.eliminated_round = None  # set when the bot goes inactive
+        self.eliminated_round = None  # first round this bot went bankrupt
         self.error_count = 0
+
+        # Reported back to the bot in the next round's observation.
+        self.last_bid = 0.0
+        self.last_rank = 0
+        self.last_payoff = 0.0
 
         self._max_bid = float(max_bid)
         config = {
@@ -51,6 +56,24 @@ class Player:
         # A crash in the constructor is the participant's bug -- let it surface
         # here (run_local / harness decide what to do with it).
         self._bot = bot_cls(config)
+
+    def legal_ceiling(self) -> float:
+        """The largest bid this player may legally make right now."""
+        return min(self._max_bid, self.capital)
+
+    def begin_block(self, capital: float) -> None:
+        """Start a new block on freshly drawn capital.
+
+        Bankruptcy is scoped to a block, so a bot that went broke comes back
+        here. Its own bot object is untouched: internal state is deliberately
+        carried across the boundary, because detecting the boundary is part of
+        the problem.
+        """
+        self.capital = float(capital)
+        self.active = self.capital > ELIMINATION_CAPITAL
+        self.last_bid = 0.0
+        self.last_rank = 0
+        self.last_payoff = 0.0
 
     def ask(self, obs) -> float:
         """Call the bot for its bid this round and return a legal bid."""
@@ -71,14 +94,19 @@ class Player:
             self.error_count += 1
             return 0.0
         if bid > self._max_bid:
-            bid = self._max_bid          # clamp into the legal range
+            bid = self._max_bid          # a fixed ceiling clamps rather than voids
         if bid > capital:
-            return 0.0                   # illegal bid -> 0 (problem statement rule 10)
+            return 0.0                   # illegal bid -> 0 (problem statement §4.7)
         return bid
 
-    def settle(self, payoff: float, round_idx: int) -> None:
-        """Apply a round payoff and update elimination status."""
+    def settle(self, payoff: float, round_idx: int, *, bid: float = 0.0, rank: int = 0) -> None:
+        """Apply a round payoff and update bankruptcy status."""
         self.capital += float(payoff)
+        self.last_bid = float(bid)
+        self.last_rank = int(rank)
+        self.last_payoff = float(payoff)
         if self.active and self.capital <= ELIMINATION_CAPITAL:
+            self.capital = max(0.0, self.capital)
             self.active = False
-            self.eliminated_round = int(round_idx)
+            if self.eliminated_round is None:
+                self.eliminated_round = int(round_idx)

@@ -1,40 +1,44 @@
-# Bot interface contract (0.B)
+# Bot interface contract
 
-**Status: FROZEN (shipped).** The `Bot(config)` / `get_bid(obs) -> float` shape
-and every key below are what the engine, `run_local.py`, the sample bots, the
-harness, the sandbox child protocol and `starter-kit/README.md` all use — changing
-the shape now means re-releasing the starter kit.
+**Status: RE-FROZEN against the updated problem statement.** The
+`Bot(config)` / `get_bid(obs) -> float` shape is unchanged, but the observation
+set, the bid ceiling and the scoring all moved with the new PS
+(`Quant_Guild_Application_updated.pdf`), so the starter kit has been rebuilt.
 
-The ⚠️ items below are *engine-behaviour* decisions, not API changes. They can
-still be tuned (they're auction rules / admin settings), but doing so does not
-break any submission — a bot still just receives `obs` and returns a number.
-`starter-kit/README.md` is the participant-facing version of this document; keep
-the two in sync.
+The engine, `run_local.py`, the sample bots, the harness and the sandbox child
+protocol all follow what is below. `starter-kit/Template.py` is the runnable copy
+and `starter-kit/README.md` is the participant-facing one — keep all three in sync.
+
+Sections referenced below are from that problem statement.
 
 ---
 
 ## The file participants submit
 
-One file per variation, named `<RollNo>_<variation>.py` (e.g. `OB24C420_1.py`).
-Each file defines exactly one class called `Bot`:
+One file per variation, named `<RollNo>_<variation>.py` (e.g. `OB24C420_1.py`,
+`…_2.py`, `…_3.py`, `…_4.py`). Each file defines exactly one class called `Bot`:
 
 ```python
 class Bot:
     def __init__(self, config):
-        """Called once, before round 0."""
+        """Called once, before round 1."""
         self.id = config["player_id"]
 
     def get_bid(self, obs) -> float:
         """Called once per round. Return the bid for this round."""
-        return 0.5 * obs["x"]
+        return min(0.5 * obs["x"], obs["capital"])
 ```
 
 - The class **must** be named `Bot`.
 - `get_bid` **must** return a real number (`int` or `float`).
-- No network access, no reading/writing files, no spawning processes. (Enforced
-  by the sandbox in Phase 1.A — violations = disqualified.)
-- < 1 second per `get_bid` call, < 100 MB resident memory (PS §6).
+- No network access, no reading or writing files, no spawning processes, no
+  inspecting the simulator's internals. Enforced by `sandbox/` — violations are a
+  disqualification.
+- Under 1 second per `get_bid` call, under 100 MB resident memory (§11).
 - Any pip-installable library is allowed, but it must be listed in the report.
+
+State kept on `self` survives all 2000 rounds. It is deliberately **not** cleared
+at a block boundary — detecting the boundary is part of the problem (§5).
 
 ---
 
@@ -43,69 +47,93 @@ class Bot:
 | key | type | meaning |
 |---|---|---|
 | `player_id` | `int` | this bot's index within its group (stable for the whole game) |
-| `variation` | `int` | `1`, `2`, or `3` |
-| `num_players` | `int` | players in the group at the start (before any elimination) |
-| `num_rounds` | `int` | always `2000` |
-| `starting_capital` | `float` | this bot's starting capital |
-| `max_bid` | `float` | legal bids are in `[0, max_bid]` |
+| `variation` | `int` | `1`, `2`, `3` or `4` |
+| `num_players` | `int` | players in the group at the start |
+| `num_rounds` | `int` | total rounds, normally `2000` |
+| `starting_capital` | `float` | this bot's capital **for block 1 only** — it is redrawn at every boundary |
+| `max_bid` | `float` | historical; the real ceiling is your capital, and `obs["max_bid"]` reports it |
 
 ## `obs` (passed to `get_bid` every round)
 
-| key | type | meaning |
-|---|---|---|
-| `round` | `int` | 0-indexed round number |
-| `x` | `float` | **this bot's private value** this round (nobody else's) |
-| `capital` | `float` | capital available right now |
-| `num_players` | `int` | players **still active** this round |
-| `max_bid` | `float` | legal bid ceiling (same as `config["max_bid"]`) |
-| `highest_bid_last_100` | `float` | highest single bid seen in the last ≤100 rounds; `0.0` if none yet |
-| `second_highest_bid_last_100` | `float` | second-highest single bid over the same window; `0.0` if none yet |
-| ⚠️ `highest_bids` | `list[float]` | per-round highest bid, oldest→newest, len ≤ 100 |
-| ⚠️ `second_highest_bids` | `list[float]` | per-round second-highest bid, aligned with `highest_bids` |
+Exactly the table in §5, and nothing else.
 
-⚠️ **Decision needed:** PS §3.8 literally says bots get "the highest and second-highest
-bids of the previous 100 rounds" — that reads as **two numbers**
-(`highest_bid_last_100`, `second_highest_bid_last_100`). Providing the full
-per-round series (`highest_bids`, `second_highest_bids`) gives strictly more
-information. Pick one:
-- **A — scalars only** (faithful to the PS text).
-- **B — scalars + series** (more useful for adaptive strategies; still a superset,
-  so nothing breaks, but we're handing out more than the PS promises).
+| key | type | V1 | V2 | V3 | V4 | meaning |
+|---|---|:-:|:-:|:-:|:-:|---|
+| `round` | `int` | ✓ | ✓ | ✓ | ✓ | 1-indexed round number |
+| `x` | `float` | ✓ | ✓ | ✓ | ✓ | **this bot's private value** this round |
+| `capital` | `float` | ✓ | ✓ | ✓ | ✓ | capital available right now |
+| `max_bid` | `float` | ✓ | ✓ | ✓ | ✓ | the legal ceiling — equal to `capital` |
+| `num_players` | `int` | ✓ | ✓ | ✓ | ✓ | players **still solvent** this round (nₜ) |
+| `highest_bid_last_round` | `float` | ✓ | ✓ | ✓ | ✓ | b₁ of the previous round; `0.0` in round 1 |
+| `second_highest_bid_last_round` | `float` | ✓ | ✓ | ✓ | ✓ | b₂ of the previous round |
+| `my_last_bid` | `float` | ✓ | ✓ | ✓ | ✓ | what this bot bid last round |
+| `my_last_rank` | `int` | ✓ | ✓ | ✓ | ✓ | its rank last round; `1` means it won |
+| `my_last_payoff` | `float` | ✓ | ✓ | ✓ | ✓ | what that was worth |
+| `max_value_last_round` | `float` | — | ✓ | ✓ | ✓ | the realised X of the previous round |
+| `top_bids_last_round` | `list[float]` | — | — | — | ✓ | `[b₁, b₂, b₃, b₄, b₅]` of the previous round |
 
-_Current scaffold assumes B and clearly documents it; flip to A by deleting the two
-series keys if the team prefers._
+Everything is `0.0` in round 1, because nothing has happened yet.
+
+A bot is **never** told m_b, M_b, the block index, when a boundary occurs, or any
+other player's value, capital or identity.
 
 ---
 
-## Engine rules the bot should know (PS §3–4)
+## Engine rules the bot should know (§3, §4, §6)
 
-1. Highest bid wins. Ties (within `1e-9`) → **all** tied bidders win, each gets the
-   full payoff.
-2. Bid `> capital` → the engine silently replaces it with `0` for that round.
-   Bids outside `[0, max_bid]` are clamped.
-3. A returned value that is `NaN`, `inf`, negative, or not a number → treated as an
-   illegal bid → `0`.
-4. Payoffs (`bid` = winning bid):
-   - **V1:** winner gets `x_i - bid` (winner's own value).
-   - **V2:** winner gets `X - bid` where `X = max(x_i)` over all players.
-   - **V3:** winner gets `X - bid`; the second-highest bidder gets
-     `-0.5 * (X - bid)`, or `0` if `X - bid < 0`.
-5. `capital += payoff` each round. ⚠️ **Decision needed:** a bot is eliminated when
-   its capital `<= 0` (current assumption, `config.ELIMINATION_CAPITAL`) vs when it
-   can no longer afford any positive bid. Eliminated bots don't return and aren't
-   counted in `num_players`.
-6. ⚠️ **Decision needed — zero / tied-low bids.** The literal rules ("highest bid
-   wins; ties all win") mean that if *every* bid in a round is 0, the whole field
-   wins and each bot pockets `x_i - 0 = x_i` for free (V1) or `X` for free (V2/V3).
-   The engine currently implements this literally. Options: (a) keep it — bidding
-   is then a real game-theoretic race to not-be-undercut; (b) "no winner if the
-   top bid is 0"; (c) require a positive minimum bid. Same question applies to a
-   whole field tied at any value.
+1. **The bid ceiling is your capital.** A bid above it, below zero, `NaN`, `inf`,
+   not a number, or not returned in time is filed as `0` for that round.
+2. **Blocks.** 2000 rounds split into 4 blocks of 500. At every boundary the value
+   distribution is redrawn *and* every player's capital is redrawn:
+   κ ~ U[0.5, 2.5], capital = max(κ·M_b + u, 0.05·M_b) with u ~ U[−10, 10].
+   What you finished the previous block with does not carry over.
+3. **Bankruptcy is per block.** A bot at zero capital sits out the rest of *that
+   block* and returns at the next boundary on a fresh draw. While it is out it
+   does not contribute a value, so it does not count towards nₜ or X.
+4. **Ties.** In V1 and V2 every bidder tied at the top wins and takes the full
+   payoff. V3 and V4 need distinct ranks, so ties there are broken uniformly at
+   random.
+5. **Payoffs** (b₁ ≥ b₂ ≥ … are the sorted bids, X is the maximum value over the
+   players active that round):
+   - **V1:** winner takes `x_i − b₁`; everyone else zero.
+   - **V2:** winner takes `X − b₁`; everyone else zero.
+   - **V3:** winner takes `X − b₁`; rank 2 pays `−0.5 · (X − b₁)`, or nothing when
+     `X − b₁ < 0`.
+   - **V4:** if `b₁ ≤ X`, rank 1 takes `X − b₂`, rank 2 takes `X − b₁`, and ranks
+     3, 4 and 5 pay 0.5, 0.3 and 0.2 of the total the top two earned — so the round
+     is exactly zero-sum. With fewer than five active players the shares
+     renormalise over the ranks that exist; with two or fewer no penalty is
+     collected. If `b₁ > X`, the winner alone takes `X − b₁` and nobody else is
+     touched.
+6. `capital += payoff` each round.
+
+### Known engine decisions
+
+These are ours, not the problem statement's, and are worth knowing:
+
+- **Every bid zero.** The literal rules ("highest bid wins; ties all win") mean a
+  round in which nobody bids is won by the whole field, each taking `x_i` (V1) or
+  `X` (V2) for free. The engine implements this literally.
+- **Fewer than two solvent players.** Not an auction, and the problem statement
+  has no rule for it, so the engine skips such a round entirely — no values are
+  drawn and no payoffs are assigned. The block still ends on schedule and everyone
+  comes back at the next boundary.
+- **Elimination threshold** is `capital <= 0` (`config.ELIMINATION_CAPITAL`),
+  not "cannot afford a positive bid".
+
+---
+
+## Scoring (§8)
+
+Raw profit never ranks anybody. For each player and block,
+`π = (C_end − C_start) / M_b`; within each group and block those are standardised
+to `P = 50 + 15 · clip(z, −3, 3)`. An iteration score is the sum of the four block
+scores and a bot's total is the sum over iterations. See `src/auction/scoring.py`.
 
 ---
 
 ## Reference
 
-`starter-kit/Template.py` is the canonical, always-in-sync copy of this contract as
-runnable code. `starter-kit/auction_reference/` (built in 0.D) is a read-only copy
-of `src/auction/` so participants can see exactly how rounds are simulated.
+`starter-kit/Template.py` is the canonical runnable copy of this contract.
+`starter-kit/auction_reference/` is a read-only copy of `src/auction/`, generated
+by `build_kit.py`, so participants can see exactly how a round is simulated.

@@ -17,6 +17,7 @@ import time
 
 from harness.evaluate import ShowdownSettings, run_showdown
 from harness.simulate import BotSpec
+from src.auction.capital import CapitalDraw
 
 from . import events, store
 
@@ -140,6 +141,16 @@ class Scheduler:
             )
         return field
 
+    @staticmethod
+    def current_seeding() -> dict[int, dict[str, float]]:
+        """Per variation: what each bot has scored so far, for snake seeding."""
+        seeding: dict[int, dict[str, float]] = {}
+        for row in store.leaderboard():
+            seeding.setdefault(int(row["variation"]), {})[row["key"]] = float(
+                row.get("score", 0.0)
+            )
+        return seeding
+
     async def run_once(self) -> dict:
         if self.running:
             return {"status": "already-running"}
@@ -151,14 +162,16 @@ class Scheduler:
             return {"status": "no-submissions"}
 
         show_settings = ShowdownSettings(
-            variations=tuple(settings.get("variations", [1, 2, 3])),
+            variations=tuple(settings.get("variations", [1, 2])),
             num_rounds=int(settings.get("num_rounds", 2000)),
+            block_size=int(settings.get("block_size", 500)),
             group_size=int(settings.get("group_size", 20)),
-            repeats=int(settings.get("repeats", 3)),
-            starting_capitals=tuple(float(c) for c in settings.get("starting_capitals", [100.0])),
-            max_bid=float(settings.get("max_bid", 100.0)),
+            iterations=int(settings.get("iterations", 3)),
+            grouping=str(settings.get("grouping", "random")),
+            finals_size=int(settings.get("finals_size", 20)),
+            capital=CapitalDraw.from_settings(settings),
             block_bounds=tuple(tuple(b) for b in settings.get("block_bounds")),
-            seed=int(settings.get("seed", 20260923)) + int(time.time()) % 100000,
+            seed=int(settings.get("seed", 20260916)) + int(time.time()) % 100000,
             workers=int(settings.get("workers", 4)),
             round_timeout=float(settings.get("round_timeout", 1.0)),
             mem_mb=int(settings.get("mem_mb", 512)),
@@ -177,8 +190,14 @@ class Scheduler:
             events.publish_threadsafe(loop, "progress", {"done": done, "total": total})
 
         try:
+            # Iteration 3 balances groups by cumulative points, and the finals
+            # cut the field on them, so both need the standing board (§9).
+            seeding = self.current_seeding() if show_settings.grouping != "random" else None
             result = await loop.run_in_executor(
-                None, lambda: run_showdown(field, show_settings, progress=on_progress)
+                None,
+                lambda: run_showdown(
+                    field, show_settings, progress=on_progress, seeding=seeding
+                ),
             )
             store.finish_showdown(
                 showdown_id,

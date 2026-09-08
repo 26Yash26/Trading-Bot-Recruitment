@@ -95,21 +95,36 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "submissions_open": True,
     "showdown_enabled": True,
     "interval_minutes": 120,
-    "variations": [1, 2, 3],
+    # Variations 3 and 4 are released after mock auction 1 (problem statement §2),
+    # so they start switched off and the admin turns them on when the time comes.
+    "variations": [1, 2],
+    # The game (§3).
     "num_rounds": 2000,
+    "block_size": 500,
     "group_size": 20,
-    "repeats": 3,
-    "starting_capitals": [100.0],
-    "max_bid": 100.0,
+    # The tournament (§9): how many iterations, and how groups are drawn.
+    "iterations": 3,
+    "grouping": "random",          # random | balanced | finals
+    "finals_size": 20,
+    # The capital draw at every block boundary (§3.1).
+    "kappa_lo": 0.5,
+    "kappa_hi": 2.5,
+    "jitter_lo": -10.0,
+    "jitter_hi": 10.0,
+    "floor_fraction": 0.05,
+    # Never leaves the server.
     "block_bounds": [[0.0, 100.0], [0.0, 100.0], [0.0, 100.0], [0.0, 100.0]],
-    "seed": 20260923,
+    "seed": 20260916,
+    # Sandbox and throughput.
     "workers": 4,
     "round_timeout": 1.0,
     "mem_mb": 512,
     "submit_cooldown": 60,
     "banned_rolls": [],
+    # Site copy.
     "announcement": "",
-    "deadline_iso": "2026-09-23T23:59:00+05:30",
+    "deadline_iso": "2026-09-16T23:59:00+05:30",
+    "submission_form_url": "",
     # Runtime clock state, persisted so the countdown survives a redeploy.
     "next_run_at": 0.0,
     "last_run_at": 0.0,
@@ -154,8 +169,15 @@ def _query(sql: str, params: tuple = ()) -> list[sqlite3.Row]:
 
 
 def get_settings() -> dict[str, Any]:
+    """Defaults, overlaid with what has been saved.
+
+    Keys that are no longer in ``DEFAULT_SETTINGS`` are dropped rather than
+    passed through: a database written by an older build still holds settings the
+    problem statement has since retired, and they must not reach the site.
+    """
     stored = {row["key"]: json.loads(row["value"]) for row in _query("SELECT key, value FROM settings")}
-    return {**DEFAULT_SETTINGS, **stored}
+    known = {k: v for k, v in stored.items() if k in DEFAULT_SETTINGS}
+    return {**DEFAULT_SETTINGS, **known}
 
 
 def public_settings() -> dict[str, Any]:

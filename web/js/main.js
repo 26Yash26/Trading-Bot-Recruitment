@@ -1,9 +1,9 @@
 // App shell: shared state, navigation, routing, and the live connection.
 
 import { api, openStream } from "./api.js";
-import { startBackdrop } from "./backdrop.js";
-import { syncClock } from "./countdown.js";
-import { esc, observeReveals, toast } from "./ui.js";
+import { serverNow, syncClock } from "./countdown.js";
+import { observeCounters, observeReveals, startCursor, startParallax } from "./motion.js";
+import { clockParts, esc, relativeTime, toast } from "./ui.js";
 
 import { renderHome } from "./pages/home.js";
 import { renderLeaderboard } from "./pages/leaderboard.js";
@@ -44,15 +44,17 @@ export const store = {
 // --- routing -------------------------------------------------------------------
 
 const ROUTES = [
-  { path: "/", render: renderHome, nav: "Home" },
-  { path: "/leaderboard", render: renderLeaderboard, nav: "Leaderboard" },
-  { path: "/rules", render: renderRules, nav: "Rules" },
-  { path: "/submit", render: renderSubmit, nav: "Submit" },
+  { path: "/", render: renderHome, nav: "Index", index: "01" },
+  { path: "/leaderboard", render: renderLeaderboard, nav: "Board", index: "02" },
+  { path: "/rules", render: renderRules, nav: "Problem", index: "03" },
+  { path: "/submit", render: renderSubmit, nav: "Submit", index: "04" },
   { path: "/login", render: renderLogin },
   { path: "/admin", render: renderAdmin },
 ];
 
 let disposePage = null;
+let disposeMotion = () => {};
+let menuOpen = false;
 
 function matchRoute(pathname) {
   const clean = pathname.replace(/\/+$/, "") || "/";
@@ -69,6 +71,8 @@ async function renderRoute() {
   const app = document.getElementById("app");
   const route = matchRoute(location.pathname);
 
+  menuOpen = false;
+
   if (disposePage) {
     try {
       disposePage();
@@ -77,6 +81,7 @@ async function renderRoute() {
     }
     disposePage = null;
   }
+  disposeMotion();
 
   if (!route) {
     app.innerHTML = notFound();
@@ -84,7 +89,7 @@ async function renderRoute() {
     return;
   }
 
-  app.innerHTML = `<div class="mx-auto max-w-6xl px-5 py-16 text-center text-ink-faint">Loading…</div>`;
+  app.innerHTML = `<div class="bleed py-32"><p class="label animate-blip">Loading</p></div>`;
   renderNav();
 
   try {
@@ -92,83 +97,237 @@ async function renderRoute() {
   } catch (error) {
     console.error(error);
     app.innerHTML = errorPanel(error.message);
+    app.querySelector("[data-reload]")?.addEventListener("click", () => location.reload());
   }
 
-  observeReveals(app);
+  const stopReveals = observeReveals(app);
+  const stopCounters = observeCounters(app);
+  disposeMotion = () => {
+    stopReveals();
+    stopCounters();
+  };
+
   window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
 }
 
 function notFound() {
   return `
-    <section class="mx-auto grid max-w-3xl place-items-center px-5 py-28 text-center">
-      <p class="font-mono text-7xl font-bold text-gradient-gold">404</p>
-      <h1 class="mt-4 text-2xl font-bold">No such page</h1>
-      <p class="mt-2 text-ink-dim">That route does not exist. The auction is this way.</p>
-      <a href="/" data-link class="btn-gold mt-7">Back to the floor</a>
+    <section class="bleed py-32">
+      <p class="label">Error 404</p>
+      <h1 class="d1 mt-8 font-display">Nothing<br>here</h1>
+      <p class="lede mt-8 max-w-md">That route does not exist. The auction is this way.</p>
+      <a href="/" data-link class="btn-solid mt-10">Back to the floor <span>→</span></a>
     </section>`;
 }
 
 function errorPanel(message) {
   return `
-    <section class="mx-auto max-w-3xl px-5 py-24 text-center">
-      <h1 class="text-2xl font-bold text-loss">Something broke</h1>
-      <p class="mt-3 font-mono text-sm text-ink-dim">${esc(message)}</p>
-      <button class="btn-ghost mt-7" onclick="location.reload()">Reload</button>
+    <section class="bleed py-32">
+      <p class="label text-loss">Error</p>
+      <h1 class="d2 mt-8 font-display">Something broke</h1>
+      <p class="mt-6 font-mono text-sm text-ink-2">${esc(message)}</p>
+      <button class="btn-line mt-10" data-reload>Reload the page</button>
     </section>`;
 }
 
-// --- navigation bar ------------------------------------------------------------
+// --- chrome --------------------------------------------------------------------
 
-function renderNav() {
-  const header = document.getElementById("nav");
-  const current = location.pathname.replace(/\/+$/, "") || "/";
-  const me = store.me;
+// A chart glyph rather than a lettermark: three bids, one of them winning.
+const MARK = `
+  <svg viewBox="0 0 24 24" class="h-6 w-6" aria-hidden="true" fill="none">
+    <rect x="1" y="13" width="4" height="9" class="fill-ink-3"/>
+    <rect x="10" y="8" width="4" height="14" class="fill-ink-3"/>
+    <rect x="19" y="2" width="4" height="20" class="fill-flame"/>
+  </svg>`;
 
-  const links = ROUTES.filter((route) => route.nav)
+const THEME_ICON = {
+  dark: `<svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+           <circle cx="12" cy="12" r="4.2"/>
+           <path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8"/>
+         </svg>`,
+  light: `<svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+            <path d="M20 14.2A8.2 8.2 0 0 1 9.8 4a8.4 8.4 0 1 0 10.2 10.2z"/>
+          </svg>`,
+};
+
+function navLinks(current) {
+  return ROUTES.filter((route) => route.nav)
     .map((route) => {
       const active = route.path === current;
       return `
         <a href="${route.path}" data-link
-           class="relative rounded-lg px-3 py-1.5 text-sm font-medium transition-colors
-                  ${active ? "text-gold" : "text-ink-dim hover:text-ink"}">
+           class="group flex items-baseline gap-2 font-mono text-[11px] uppercase tracking-[0.18em]
+                  transition-colors ${active ? "text-flame" : "text-ink-2 hover:text-ink"}"
+           ${active ? 'aria-current="page"' : ""}>
+          <span class="text-[9px] ${active ? "text-flame" : "text-ink-3"}">${route.index}</span>
           ${route.nav}
-          ${active ? '<span class="absolute inset-x-2 -bottom-px h-px bg-gold"></span>' : ""}
         </a>`;
     })
     .join("");
+}
 
-  const adminLink = me.is_admin
-    ? `<a href="/admin" data-link class="chip border-violet/40 text-violet hover:border-violet">Admin</a>`
-    : "";
+function overlayLinks(current) {
+  return ROUTES.filter((route) => route.nav)
+    .map(
+      (route) => `
+      <a href="${route.path}" data-link
+         class="hair-b flex items-baseline justify-between py-5 transition-colors
+                ${route.path === current ? "text-flame" : "hover:text-flame"}">
+        <span class="d2 font-display">${route.nav}</span>
+        <span class="font-mono text-[11px] text-ink-3">${route.index}</span>
+      </a>`
+    )
+    .join("");
+}
 
-  const account = me.signed_in
-    ? `<div class="flex items-center gap-2">
-         ${adminLink}
-         <span class="hidden items-center gap-2 rounded-full border border-line-bright bg-surface-2/70 px-3 py-1.5 sm:flex">
-           <span class="grid h-5 w-5 place-items-center rounded-full bg-gold text-[10px] font-bold text-void">
-             ${esc((me.name || "?").trim().charAt(0).toUpperCase())}
-           </span>
-           <span class="max-w-[9rem] truncate font-mono text-xs text-ink">${esc(me.roll || me.name)}</span>
-         </span>
-         <button data-logout class="rounded-lg px-2.5 py-1.5 text-xs text-ink-faint transition-colors hover:text-loss">
-           Sign out
-         </button>
-       </div>`
-    : `<a href="/login" data-link class="btn-gold px-4 py-2 text-xs">Sign in</a>`;
+function accountBlock(me) {
+  if (!me.signed_in) {
+    return `<a href="/login" data-link class="btn-solid whitespace-nowrap px-3 py-2.5 sm:px-4">Sign in</a>`;
+  }
+
+  return `
+    <div class="flex items-center gap-2">
+      ${me.is_admin ? `<a href="/admin" data-link class="tag hover:border-flame hover:text-flame">Control</a>` : ""}
+      <span class="hidden items-center gap-2 border border-line px-2.5 py-1.5 sm:flex">
+        <span class="dot text-flame"></span>
+        <span class="max-w-[8rem] truncate font-mono text-[11px]">${esc(me.roll || me.name)}</span>
+      </span>
+      <button data-logout class="btn-quiet px-2.5 py-2">Out</button>
+    </div>`;
+}
+
+function renderNav() {
+  const header = document.getElementById("nav");
+  const current = location.pathname.replace(/\/+$/, "") || "/";
+  const theme = window.QGTheme?.current?.() || "dark";
+  const next = theme === "dark" ? "light" : "dark";
+
+  header.className = `sticky top-0 z-40 hair-b backdrop-blur-md ${
+    menuOpen ? "bg-void" : "bg-void/85"
+  }`;
 
   header.innerHTML = `
-    <div class="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-5">
-      <a href="/" data-link class="group flex items-center gap-2.5">
-        <span class="grid h-8 w-8 place-items-center rounded-lg border border-gold/40 bg-gold/10
-                     font-heading text-sm font-bold text-gold transition-transform group-hover:scale-105">Q</span>
-        <span class="font-heading text-base font-bold tracking-tight">
-          Quant <span class="text-gold">Guild</span>
-        </span>
+    <div class="bleed flex h-16 items-center gap-6">
+      <a href="/" data-link class="flex items-center gap-3">
+        ${MARK}
+        <span class="font-display text-lg leading-none">Quant&nbsp;Guild</span>
       </a>
-      <nav class="hidden items-center gap-1 md:flex">${links}</nav>
-      <div class="flex items-center gap-2">${account}</div>
+
+      <nav class="ml-4 hidden items-center gap-7 md:flex" aria-label="Primary">
+        ${navLinks(current)}
+      </nav>
+
+      <div class="ml-auto flex items-center gap-3">
+        <span class="hidden font-mono text-[11px] text-ink-3 lg:inline" data-nav-status></span>
+        <button data-theme-toggle class="btn-quiet px-2 py-2"
+                title="Switch to the ${next} theme" aria-label="Switch to the ${next} theme">
+          ${THEME_ICON[theme] || THEME_ICON.dark}
+        </button>
+        ${accountBlock(store.me)}
+        <button data-menu class="btn-line px-3 py-2 md:hidden"
+                aria-expanded="${menuOpen}" aria-label="Menu">${menuOpen ? "Close" : "Menu"}</button>
+      </div>
     </div>
-    <nav class="flex items-center justify-center gap-1 border-t border-line/60 py-1.5 md:hidden">${links}</nav>`;
+
+    ${
+      menuOpen
+        ? `<nav class="bleed hair pb-10 pt-4 md:hidden" aria-label="Primary">${overlayLinks(current)}</nav>`
+        : ""
+    }`;
+}
+
+/**
+ * The one-line status in the masthead, ticking once a second.
+ *
+ * It is written straight into the node rather than going through a re-render,
+ * so a countdown in the header never fights the router for the DOM.
+ */
+function startNavStatus() {
+  setInterval(() => {
+    const node = document.querySelector("[data-nav-status]");
+    if (!node) return;
+
+    const schedule = store.schedule;
+    if (schedule.running) {
+      node.textContent = "● showdown live";
+      node.className = "hidden font-mono text-[11px] text-flame lg:inline";
+      return;
+    }
+    node.className = "hidden font-mono text-[11px] text-ink-3 lg:inline";
+    if (!schedule.enabled) {
+      node.textContent = "showdowns paused";
+      return;
+    }
+    const nextAt = Number(schedule.next_run_at) || 0;
+    if (!nextAt) {
+      node.textContent = "";
+      return;
+    }
+    const { hours, minutes, seconds } = clockParts(nextAt - serverNow());
+    node.textContent = `next showdown ${hours}:${minutes}:${seconds}`;
+  }, 1000);
+}
+
+// --- announcement --------------------------------------------------------------
+
+// Dismissals are keyed by the message itself, so publishing a new announcement
+// shows it again to somebody who dismissed the last one.
+const announcementKey = (text) =>
+  `qg-announce-${Array.from(text).reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 7)}`;
+
+function renderAnnouncement() {
+  const host = document.getElementById("announce");
+  if (!host) return;
+
+  const text = (store.state?.announcement || "").trim();
+  if (!text) {
+    host.innerHTML = "";
+    return;
+  }
+
+  let dismissed = false;
+  try {
+    dismissed = localStorage.getItem(announcementKey(text)) === "1";
+  } catch (error) {
+    /* site data blocked — show it, which is the safe direction */
+  }
+  if (dismissed) {
+    host.innerHTML = "";
+    return;
+  }
+
+  host.innerHTML = `
+    <div class="bg-flame text-void">
+      <div class="bleed flex items-start gap-4 py-2.5">
+        <span class="mt-px shrink-0 font-mono text-[10px] uppercase tracking-[0.22em]">Notice</span>
+        <p class="flex-1 text-sm leading-relaxed">${esc(text)}</p>
+        <button data-dismiss-announce class="shrink-0 font-mono text-xs" aria-label="Dismiss">✕</button>
+      </div>
+    </div>`;
+
+  host.querySelector("[data-dismiss-announce]")?.addEventListener("click", () => {
+    try {
+      localStorage.setItem(announcementKey(text), "1");
+    } catch (error) {
+      /* nothing to persist to; it will reappear next load */
+    }
+    host.innerHTML = "";
+  });
+}
+
+function renderFooterStatus() {
+  const node = document.querySelector("[data-footer-status]");
+  if (!node) return;
+  const state = store.state;
+  if (!state) {
+    node.textContent = "";
+    return;
+  }
+  const counts = state.counts || { participants: 0, per_variation: {} };
+  const bots = Object.values(counts.per_variation || {}).reduce((a, b) => a + b, 0);
+  node.textContent =
+    `${counts.participants} participants · ${bots} bots · ` +
+    `last showdown ${state.last_showdown ? relativeTime(state.last_showdown.finished_at) : "never"}`;
 }
 
 // --- live connection -----------------------------------------------------------
@@ -208,6 +367,14 @@ function connectLive() {
   openStream({
     onLeaderboard: (rows) => store.set({ rows: Array.isArray(rows) ? rows : [] }),
     onSchedule: (schedule) => store.set({ state: { ...(store.state || {}), schedule } }),
+
+    // An admin changed a setting. This is what makes releasing a variation
+    // reach every open tab immediately instead of on the next reload.
+    onState: (state) => {
+      syncClock(state.now);
+      store.set({ state });
+    },
+
     onProgress: ({ done, total }) =>
       store.set({
         state: {
@@ -227,6 +394,7 @@ function connectLive() {
       // The finish rewrites next_run_at, so re-read the authoritative clock.
       if (!running) refreshState();
     },
+
     onError: () => {
       failures += 1;
       // EventSource retries by itself; after a few genuine failures fall back to
@@ -238,10 +406,23 @@ function connectLive() {
 
 // --- boot ----------------------------------------------------------------------
 
-function interceptLinks() {
+function interceptClicks() {
   document.addEventListener("click", (event) => {
-    const logout = event.target.closest("[data-logout]");
-    if (logout) {
+    if (event.target.closest("[data-theme-toggle]")) {
+      event.preventDefault();
+      window.QGTheme?.toggle();
+      renderNav();
+      return;
+    }
+
+    if (event.target.closest("[data-menu]")) {
+      event.preventDefault();
+      menuOpen = !menuOpen;
+      renderNav();
+      return;
+    }
+
+    if (event.target.closest("[data-logout]")) {
       event.preventDefault();
       api
         .logout()
@@ -260,22 +441,40 @@ function interceptLinks() {
 
     event.preventDefault();
     const href = link.getAttribute("href");
-    if (href !== location.pathname) navigate(href);
+
+    // Tapping the current page in the mobile menu should close it, not push a
+    // second history entry for the page you are already on.
+    if (href === location.pathname) {
+      if (menuOpen) {
+        menuOpen = false;
+        renderNav();
+      }
+      return;
+    }
+    navigate(href);
   });
 
   window.addEventListener("popstate", renderRoute);
 }
 
 async function boot() {
-  startBackdrop(document.getElementById("backdrop"));
-  interceptLinks();
+  interceptClicks();
+  startCursor();
+  startParallax();
 
-  store.subscribe(renderNav);
+  store.subscribe(() => {
+    renderNav();
+    renderAnnouncement();
+    renderFooterStatus();
+  });
 
   const [me] = await Promise.allSettled([api.me(), refreshState(), refreshLeaderboard()]);
   if (me.status === "fulfilled") store.set({ me: me.value });
 
+  renderAnnouncement();
+  renderFooterStatus();
   await renderRoute();
+  startNavStatus();
   connectLive();
 
   // A tab left open overnight should not show a stale board.

@@ -71,7 +71,14 @@ export const api = {
  * server is restarted mid-deploy it can sit in a failed state, so a failure is
  * escalated to the caller and the caller falls back to polling.
  */
-export function openStream({ onLeaderboard, onSchedule, onProgress, onShowdown, onError }) {
+export function openStream({
+  onLeaderboard,
+  onSchedule,
+  onState,
+  onProgress,
+  onShowdown,
+  onError,
+}) {
   let source;
   try {
     source = new EventSource(`${BASE}/leaderboard/stream`, { withCredentials: true });
@@ -92,6 +99,9 @@ export function openStream({ onLeaderboard, onSchedule, onProgress, onShowdown, 
 
   bind("leaderboard", onLeaderboard);
   bind("schedule", onSchedule);
+  // Published whenever an admin changes a setting, so a variation switched off
+  // in the control room disappears from every open tab without a reload.
+  bind("state", onState);
   bind("progress", onProgress);
   bind("showdown", onShowdown);
   source.addEventListener("error", () => onError?.());

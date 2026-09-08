@@ -22,17 +22,25 @@ GROUP_SIZE = 20
 """Bots are evaluated in randomly-drawn groups of this size."""
 
 EVAL_REPEATS = 3
-"""The full grouped simulation is repeated this many times to average out luck."""
+"""Qualification iterations: the whole field is regrouped and replayed this often."""
+
+QUALIFICATION_ITERATIONS = 3
+"""Iterations 1-3 (§9). Two random, one strength-balanced by cumulative points."""
+
+FINALS_ITERATIONS = 2
+"""Iterations 4-5: the top bots play head to head on two fresh seeds."""
+
+FINALS_SIZE = 20
+"""How many bots reach the finals, by cumulative score after qualification."""
 
 # --- Set before the competition (announced to participants) --------------------
 
-MAX_BID = 100.0
-"""Legal bids lie in [0, MAX_BID].
+MAX_BID = None
+"""There is no fixed bid ceiling: the legal maximum is the player's own capital.
 
-Announced default. The live value is an admin setting (`max_bid` in the server's
-settings table) so it can be changed without a deploy; this constant is the
-fallback for `run_local.py` and any direct use of the engine. Confirm the final
-number with the organisers before the PS goes out."""
+`None` means "use the player's capital", which is the rule in problem statement
+§3. The engine still accepts a fixed number so its unit tests can pin payoff
+arithmetic without depending on a capital draw."""
 
 # --- Engine behaviour (our decisions — keep in sync with docs/bot_interface.md) -
 

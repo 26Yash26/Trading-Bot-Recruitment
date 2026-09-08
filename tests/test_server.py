@@ -196,6 +196,53 @@ def test_unknown_settings_keys_are_ignored(as_admin):
     store.update_settings({"interval_minutes": 120})
 
 
+# --- the variations switchboard -------------------------------------------------
+#
+# Turning a variation off in the control room is meant to remove it from the
+# site *and* stop it being accepted. These tests pin both halves, plus the
+# refusal to end up with nothing in play at all.
+
+
+def test_state_reports_which_variations_are_in_play(as_admin, client):
+    as_admin.patch("/api/admin/settings", json={"variations": [1, 4]}, headers=ORIGIN)
+    assert client.get("/api/state").json()["variations"] == [1, 4]
+    store.update_settings({"variations": [1, 2]})
+
+
+def test_variations_are_normalised(as_admin):
+    """Duplicates and out-of-order input still land as a sorted set."""
+    response = as_admin.patch(
+        "/api/admin/settings", json={"variations": [4, 1, 1]}, headers=ORIGIN
+    )
+    assert response.status_code == 200
+    assert response.json()["settings"]["variations"] == [1, 4]
+    store.update_settings({"variations": [1, 2]})
+
+
+@pytest.mark.parametrize("value", [[], [5], ["1"], "1", [0]])
+def test_an_unusable_variation_list_is_refused(as_admin, value):
+    """The whole site is drawn from this list, so it must never go empty or junk."""
+    before = store.get_settings()["variations"]
+    response = as_admin.patch("/api/admin/settings", json={"variations": value}, headers=ORIGIN)
+    assert response.status_code == 400
+    assert store.get_settings()["variations"] == before
+
+
+def test_a_switched_off_variation_refuses_uploads(as_user):
+    """The submit form stops offering it; the API has to stop taking it too."""
+    store.update_settings({"variations": [1]})
+    try:
+        response = as_user.post(
+            "/api/submit",
+            files={"file": ("ME24B152_4.py", b"class Bot:\n    pass\n")},
+            headers=ORIGIN,
+        )
+        assert response.status_code == 400
+        assert "not in play" in response.json()["detail"]
+    finally:
+        store.update_settings({"variations": [1, 2]})
+
+
 # --- cross-origin --------------------------------------------------------------
 
 

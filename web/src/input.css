@@ -4,215 +4,452 @@
 @source "../../index.html";
 @source "../js/**/*.js";
 
+/* ---------------------------------------------------------------------------
+   The palette.
+
+   Dark is the design, not a mode: near-black ground, off-white type, one
+   vermilion that carries every live signal and one jade that carries the
+   positive numbers. "Paper" is the same system inverted for people who ask
+   their machine for a light interface — the accents do not move.
+   --------------------------------------------------------------------------- */
+
 @theme {
-  --color-void: #07070a;
-  --color-surface: #0e0e13;
-  --color-surface-2: #15151d;
-  --color-line: #23232e;
-  --color-line-bright: #34344a;
+  --color-void: #08080a;
+  --color-void-2: #0d0d11;
+  --color-void-3: #131318;
+  --color-line: #21212a;
+  --color-line-2: #32323d;
 
-  --color-ink: #f5f2e8;
-  --color-ink-dim: #9b9baa;
-  --color-ink-faint: #61616f;
+  --color-ink: #f2f0ea;
+  --color-ink-2: #8e8e88;
+  --color-ink-3: #5a5a56;
 
-  --color-gold: #f5b625;
-  --color-gold-soft: #ffd76a;
-  --color-gold-deep: #b8850f;
+  --color-flame: #ff4d17;
+  --color-flame-deep: #7a2208;
+  --color-jade: #3ddbc0;
+  --color-jade-deep: #10403a;
+  --color-amber: #ffb020;
+  --color-iris: #9d8cff;
 
-  --color-gain: #34d399;
-  --color-loss: #f75c5c;
-  --color-cyan: #4cc9f0;
-  --color-violet: #a78bfa;
+  --color-gain: #3ddbc0;
+  --color-loss: #ff5c46;
 
-  --font-heading: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
-  --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Anton", "Archivo", ui-sans-serif, sans-serif;
+  --font-sans: "Archivo", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
 
-  --animate-marquee: marquee 40s linear infinite;
-  --animate-pulse-dot: pulse-dot 2s ease-in-out infinite;
-  --animate-rise: rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
-  --animate-sheen: sheen 3.5s ease-in-out infinite;
-  --animate-flicker: flicker 4s ease-in-out infinite;
+  --animate-marquee: marquee 38s linear infinite;
+  --animate-marquee-slow: marquee 70s linear infinite;
+  --animate-blip: blip 2s steps(1, end) infinite;
+  --animate-rise: rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@keyframes marquee {
-  from { transform: translateX(0); }
-  to   { transform: translateX(-50%); }
+/* Paper — the light counterpart. Same accents, inverted ground. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --color-void: #f4f2ea;
+    --color-void-2: #eceade;
+    --color-void-3: #e4e1d3;
+    --color-line: #d3cfc0;
+    --color-line-2: #b6b1a0;
+
+    --color-ink: #101014;
+    --color-ink-2: #5c5c58;
+    --color-ink-3: #8d8d86;
+
+    --color-flame: #e03c07;
+    --color-flame-deep: #ffd9cb;
+    --color-jade: #067b68;
+    --color-jade-deep: #c9efe7;
+    --color-amber: #a86a00;
+    --color-iris: #5b46c9;
+
+    --color-gain: #067b68;
+    --color-loss: #c1301b;
+  }
 }
-@keyframes pulse-dot {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50%      { opacity: 0.35; transform: scale(0.82); }
+
+:root[data-theme="light"] {
+  --color-void: #f4f2ea;
+  --color-void-2: #eceade;
+  --color-void-3: #e4e1d3;
+  --color-line: #d3cfc0;
+  --color-line-2: #b6b1a0;
+
+  --color-ink: #101014;
+  --color-ink-2: #5c5c58;
+  --color-ink-3: #8d8d86;
+
+  --color-flame: #e03c07;
+  --color-flame-deep: #ffd9cb;
+  --color-jade: #067b68;
+  --color-jade-deep: #c9efe7;
+  --color-amber: #a86a00;
+  --color-iris: #5b46c9;
+
+  --color-gain: #067b68;
+  --color-loss: #c1301b;
+}
+
+/* ---------------------------------------------------------------------------
+   Motion
+   --------------------------------------------------------------------------- */
+
+@keyframes marquee {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-50%, 0, 0); }
+}
+@keyframes blip {
+  0%, 60%  { opacity: 1; }
+  61%, 100% { opacity: 0.15; }
 }
 @keyframes rise {
-  from { opacity: 0; transform: translateY(14px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: none; }
 }
-@keyframes sheen {
-  0%, 100% { background-position: -60% 0; }
-  55%      { background-position: 160% 0; }
-}
-@keyframes flicker {
-  0%, 100% { opacity: 0.75; }
-  45%      { opacity: 1; }
-  70%      { opacity: 0.85; }
-}
-@keyframes rank-flash {
-  from { background-color: color-mix(in oklab, var(--color-gold) 22%, transparent); }
-  to   { background-color: transparent; }
-}
+
+/* ---------------------------------------------------------------------------
+   Base
+   --------------------------------------------------------------------------- */
 
 @layer base {
   html {
     scroll-behavior: smooth;
-    color-scheme: dark;
+    -webkit-text-size-adjust: 100%;
   }
 
   body {
     background-color: var(--color-void);
     color: var(--color-ink);
-    font-family: var(--font-body);
+    font-family: var(--font-sans);
+    font-size: 15px;
     -webkit-font-smoothing: antialiased;
     overflow-x: hidden;
   }
 
-  h1, h2, h3, h4 {
-    font-family: var(--font-heading);
-    letter-spacing: -0.02em;
+  h1, h2, h3 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: -0.005em;
+    line-height: 0.86;
   }
 
   ::selection {
-    background: color-mix(in oklab, var(--color-gold) 35%, transparent);
-    color: var(--color-ink);
+    background: var(--color-flame);
+    color: var(--color-void);
   }
 
-  /* Focus is never removed, only restyled — keyboard users need to see it. */
   :focus-visible {
-    outline: 2px solid var(--color-gold);
-    outline-offset: 2px;
-    border-radius: 4px;
+    outline: 2px solid var(--color-flame);
+    outline-offset: 3px;
   }
 
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: var(--color-void); }
-  ::-webkit-scrollbar-thumb {
-    background: var(--color-line-bright);
-    border-radius: 99px;
-    border: 2px solid var(--color-void);
-  }
-  ::-webkit-scrollbar-thumb:hover { background: var(--color-gold-deep); }
+  ::-webkit-scrollbar-thumb { background: var(--color-line-2); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--color-flame); }
 }
+
+/* ---------------------------------------------------------------------------
+   Components
+   --------------------------------------------------------------------------- */
 
 @layer components {
+  .skip-link { @apply sr-only; }
+  .skip-link:focus {
+    @apply not-sr-only fixed left-4 top-4 z-[100] px-4 py-2 text-sm font-semibold;
+    background: var(--color-flame);
+    color: var(--color-void);
+  }
+
+  /* --- type ------------------------------------------------------------- */
+
+  /* One display scale, used everywhere. `d1` is the hero and nothing else. */
+  .d1 { font-size: clamp(3rem, 10.5vw, 10.5rem); }
+  .d2 { font-size: clamp(2.25rem, 6.4vw, 5.75rem); }
+  .d3 { font-size: clamp(1.6rem, 3.2vw, 2.75rem); }
+  .d4 { font-size: clamp(1.15rem, 1.7vw, 1.5rem); }
+
+  .label {
+    @apply font-mono text-[10px] uppercase tracking-[0.28em];
+    color: var(--color-ink-3);
+  }
+
+  .lede {
+    @apply text-base leading-relaxed md:text-lg;
+    color: var(--color-ink-2);
+  }
+
+  .link {
+    color: var(--color-ink);
+    border-bottom: 1px solid color-mix(in oklab, var(--color-flame) 60%, transparent);
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .link:hover { color: var(--color-flame); border-color: var(--color-flame); }
+
+  /* --- structure -------------------------------------------------------- */
+
+  /* Full-bleed gutters. Everything on the site sits on this one measure. */
+  .bleed { @apply px-6 md:px-10 lg:px-14; }
+
+  .hair { border-top: 1px solid var(--color-line); }
+  .hair-b { border-bottom: 1px solid var(--color-line); }
+
+  /* A section rubric: (01) — TITLE, with a rule running to the right margin. */
+  .rubric { @apply flex items-baseline gap-4 md:gap-6; }
+  .rubric::after {
+    content: "";
+    height: 1px;
+    flex: 1 1 auto;
+    background: var(--color-line);
+    transform: translateY(-0.35em);
+  }
+
   .panel {
-    @apply rounded-2xl border border-line bg-surface/80 backdrop-blur-sm;
+    background: var(--color-void-2);
+    border: 1px solid var(--color-line);
   }
 
-  .panel-glow {
-    box-shadow:
-      0 0 0 1px color-mix(in oklab, var(--color-gold) 12%, transparent),
-      0 24px 70px -30px color-mix(in oklab, var(--color-gold) 45%, transparent);
+  .panel-2 {
+    background: var(--color-void-3);
+    border: 1px solid var(--color-line);
   }
 
-  /* Tailwind v4 cannot `@apply` a custom component class, so the shared button
-     base is a selector list. That also means `class="btn-gold"` and
-     `class="btn btn-gold"` render identically — both spellings appear in the
-     pages depending on whether a variant is being toggled. */
+  /* --- buttons ---------------------------------------------------------- */
+
   .btn,
-  .btn-gold,
-  .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5
-           text-sm font-semibold transition-all duration-200 select-none
-           disabled:cursor-not-allowed disabled:opacity-45;
+  .btn-solid,
+  .btn-line,
+  .btn-quiet {
+    @apply relative inline-flex select-none items-center justify-center gap-2.5
+           overflow-hidden px-6 py-3 font-mono text-[11px] uppercase tracking-[0.18em]
+           transition-colors duration-300 disabled:cursor-not-allowed disabled:opacity-40;
+    border: 1px solid transparent;
+  }
+  .btn > *, .btn-solid > *, .btn-line > * { position: relative; z-index: 1; }
+
+  /* The fill sweeps in from the left rather than the colour simply switching. */
+  .btn-solid::before,
+  .btn-line::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.45s var(--ease-out-expo);
+  }
+  .btn-solid:hover:not(:disabled)::before,
+  .btn-line:hover:not(:disabled)::before { transform: scaleX(1); }
+
+  .btn-solid {
+    background: var(--color-flame);
+    color: var(--color-void);
+    border-color: var(--color-flame);
+  }
+  .btn-solid::before { background: var(--color-ink); }
+  .btn-solid:hover:not(:disabled) { color: var(--color-void); border-color: var(--color-ink); }
+
+  .btn-line {
+    color: var(--color-ink);
+    border-color: var(--color-line-2);
+  }
+  .btn-line::before { background: var(--color-flame); }
+  .btn-line:hover:not(:disabled) { color: var(--color-void); border-color: var(--color-flame); }
+
+  .btn-quiet { color: var(--color-ink-2); }
+  .btn-quiet:hover:not(:disabled) { color: var(--color-flame); }
+
+  /* Flat opacity on a solid flame button gives a muddy red slab that still
+     reads as pressable. Recolouring says "not yet" instead. */
+  .btn-solid:disabled {
+    background: var(--color-void-3);
+    border-color: var(--color-line);
+    color: var(--color-ink-3);
+    opacity: 1;
   }
 
-  .btn-gold {
-    @apply text-void;
-    background: linear-gradient(135deg, var(--color-gold-soft), var(--color-gold));
-    box-shadow: 0 8px 26px -10px color-mix(in oklab, var(--color-gold) 80%, transparent);
+  /* --- small pieces ----------------------------------------------------- */
+
+  .tag {
+    @apply inline-flex items-center gap-2 border px-2.5 py-1 font-mono
+           text-[10px] uppercase tracking-[0.18em];
+    border-color: var(--color-line-2);
+    color: var(--color-ink-2);
   }
-  .btn-gold:hover:not(:disabled) {
-    transform: translateY(-1px);
-    box-shadow: 0 14px 34px -12px color-mix(in oklab, var(--color-gold) 90%, transparent);
+  .tag-live {
+    border-color: var(--color-flame);
+    color: var(--color-flame);
   }
 
-  .btn-ghost {
-    @apply border border-line-bright bg-surface-2/60 text-ink;
-  }
-  .btn-ghost:hover:not(:disabled) {
-    @apply border-gold/50 text-gold;
-  }
-
-  .chip {
-    @apply inline-flex items-center gap-1.5 rounded-full border border-line-bright
-           bg-surface-2/70 px-3 py-1 font-mono text-[11px] uppercase tracking-widest
-           text-ink-dim;
-  }
-
-  .stat-value {
-    @apply font-heading text-3xl font-bold tabular-nums text-ink md:text-4xl;
-  }
-  .stat-label {
-    @apply mt-1 font-mono text-[11px] uppercase tracking-[0.18em] text-ink-faint;
-  }
+  .dot { @apply inline-block h-1.5 w-1.5 shrink-0 rounded-full; background: currentColor; }
 
   .field {
-    @apply w-full rounded-xl border border-line bg-void/70 px-3.5 py-2.5 font-mono
-           text-sm text-ink transition-colors;
+    @apply w-full px-3 py-2.5 font-mono text-sm transition-colors;
+    background: var(--color-void);
+    border: 1px solid var(--color-line);
+    color: var(--color-ink);
   }
-  .field:focus {
-    @apply border-gold/60 outline-none;
+  .field:focus { border-color: var(--color-flame); outline: none; }
+
+  .switch-track {
+    @apply relative block h-6 w-12 shrink-0 transition-colors;
+    background: var(--color-line-2);
+  }
+  .switch-track[data-on="true"] { background: var(--color-flame); }
+  .switch-knob {
+    @apply absolute top-1 left-1 h-4 w-4 transition-all;
+    background: var(--color-void);
+  }
+  .switch-track[data-on="true"] .switch-knob { left: 1.75rem; }
+
+  .slider {
+    @apply block h-px w-full cursor-pointer appearance-none;
+    background: var(--color-line-2);
+  }
+  .slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 20px;
+    width: 8px;
+    background: var(--color-flame);
+    cursor: ew-resize;
+  }
+  .slider::-moz-range-thumb {
+    height: 20px;
+    width: 8px;
+    border: 0;
+    background: var(--color-flame);
+    cursor: ew-resize;
   }
 
-  .link-underline {
-    @apply relative text-gold transition-colors;
+  .bar-track {
+    @apply block h-1 w-full overflow-hidden;
+    background: var(--color-line);
   }
-  .link-underline::after {
+  /* Width is set from JS (the CSP forbids a style attribute in markup), so it
+     starts at zero and transitions — never an animation, which would leave the
+     bar collapsed on any browser that declines to run it. */
+  .bar {
+    @apply block h-full;
+    width: 0;
+    transition: width 0.8s var(--ease-out-expo);
+  }
+
+  /* --- marquee ---------------------------------------------------------- */
+
+  .marquee { @apply relative flex overflow-hidden; }
+  .marquee:hover .marquee-track { animation-play-state: paused; }
+  .marquee-track { @apply flex w-max shrink-0; }
+
+  /* --- cards ------------------------------------------------------------ */
+
+  .card {
+    @apply relative flex flex-col overflow-hidden p-6 transition-colors duration-300 md:p-8;
+    background: var(--color-void-2);
+    border: 1px solid var(--color-line);
+  }
+  .card::after {
     content: "";
-    @apply absolute -bottom-0.5 left-0 h-px w-0 bg-gold transition-all duration-300;
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 2px;
+    background: var(--color-flame);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.5s var(--ease-out-expo);
   }
-  .link-underline:hover::after { @apply w-full; }
+  .card:hover { border-color: var(--color-line-2); }
+  .card:hover::after { transform: scaleX(1); }
 
-  /* The gold hairline that separates major bands of the page. */
-  .rule-gold {
-    background: linear-gradient(
-      90deg,
-      transparent,
-      color-mix(in oklab, var(--color-gold) 55%, transparent),
-      transparent
-    );
-    height: 1px;
-  }
+  /* --- inverted band ---------------------------------------------------- */
 
-  .row-flash { animation: rank-flash 1.4s ease-out; }
-
-  /* The warm wash behind the hero. A class rather than a style attribute so the
-     Content-Security-Policy can forbid inline styles outright. */
-  .hero-glow {
-    background: radial-gradient(
-      ellipse 90% 55% at 50% -10%,
-      color-mix(in oklab, var(--color-gold) 16%, transparent),
-      transparent 70%
-    );
+  .invert-band {
+    background: var(--color-ink);
+    color: var(--color-void);
   }
 
-  /* Countdown ring sweep — same reason. */
-  [data-ring] {
-    transition: stroke-dashoffset 0.8s linear;
+  /* --- custom cursor ---------------------------------------------------- */
+
+  .cursor-dot,
+  .cursor-ring {
+    @apply pointer-events-none fixed left-0 top-0 z-[90] rounded-full;
+    will-change: transform;
+  }
+  .cursor-dot {
+    height: 6px;
+    width: 6px;
+    margin: -3px 0 0 -3px;
+    background: var(--color-flame);
+  }
+  .cursor-ring {
+    height: 34px;
+    width: 34px;
+    margin: -17px 0 0 -17px;
+    border: 1px solid color-mix(in oklab, var(--color-ink) 45%, transparent);
+    transition: width 0.25s, height 0.25s, margin 0.25s, border-color 0.25s, opacity 0.25s;
+  }
+  .cursor-ring[data-hot="true"] {
+    height: 56px;
+    width: 56px;
+    margin: -28px 0 0 -28px;
+    border-color: var(--color-flame);
   }
 }
 
-@utility grid-backdrop {
-  background-image:
-    linear-gradient(color-mix(in oklab, var(--color-line) 60%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in oklab, var(--color-line) 60%, transparent) 1px, transparent 1px);
-  background-size: 56px 56px;
+/* ---------------------------------------------------------------------------
+   Utilities
+   --------------------------------------------------------------------------- */
+
+/* Line-by-line mask reveal. Each line is clipped and its inner span slides up. */
+@utility reveal-line {
+  display: block;
+  overflow: hidden;
 }
 
-@utility text-gradient-gold {
-  background: linear-gradient(120deg, var(--color-gold-soft), var(--color-gold), #ff9a3c);
-  -webkit-background-clip: text;
-  background-clip: text;
+/* The vertical column guides that run behind the whole page. */
+@utility column-guides {
+  background-image: repeating-linear-gradient(
+    to right,
+    color-mix(in oklab, var(--color-line) 85%, transparent) 0 1px,
+    transparent 1px calc(100% / 6)
+  );
+}
+
+/* A very fine film grain; without it a flat near-black reads as dead pixels. */
+@utility grain {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+}
+
+@utility text-stroke {
+  -webkit-text-stroke: 1px var(--color-line-2);
   color: transparent;
+}
+
+@layer utilities {
+  /* Set by motion.js when a section scrolls into view. */
+  [data-reveal] .reveal-line > * {
+    display: block;
+    transform: translateY(110%);
+    transition: transform 1s var(--ease-out-expo);
+  }
+  [data-reveal].is-in .reveal-line > * { transform: none; }
+
+  [data-reveal] [data-fade] {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.9s var(--ease-out-expo), transform 0.9s var(--ease-out-expo);
+  }
+  [data-reveal].is-in [data-fade] { opacity: 1; transform: none; }
+
+  [data-reveal] [data-grow] {
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 1s var(--ease-out-expo);
+  }
+  [data-reveal].is-in [data-grow] { transform: scaleX(1); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -222,4 +459,7 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+  [data-reveal] .reveal-line > *,
+  [data-reveal] [data-fade],
+  [data-reveal] [data-grow] { transform: none !important; opacity: 1 !important; }
 }

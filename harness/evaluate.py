@@ -22,27 +22,40 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from sandbox.runner import SandboxLimits
+from src.auction.capital import CapitalDraw
 
 from .simulate import BotOutcome, BotSpec, make_groups, play_group
 
 
 @dataclass
 class ShowdownSettings:
-    """Everything the admin page can turn. Defaults follow the problem statement."""
+    """Everything the admin page can turn. Defaults follow the problem statement.
 
-    variations: tuple[int, ...] = (1, 2, 3)
+    ``grouping`` picks which part of §9 this run reproduces:
+    ``"random"`` is iterations 1 and 2, ``"balanced"`` is the snake-seeded
+    iteration 3, and ``"finals"`` restricts the field to the leading
+    ``finals_size`` bots and plays them head to head.
+    """
+
+    variations: tuple[int, ...] = (1, 2)
     num_rounds: int = 2000
+    block_size: int = 500
     group_size: int = 20
-    repeats: int = 3
-    starting_capitals: tuple[float, ...] = (100.0,)
-    max_bid: float = 100.0
+    iterations: int = 3
+    grouping: str = "random"
+    finals_size: int = 20
+    capital: CapitalDraw = field(default_factory=CapitalDraw)
     block_bounds: tuple[tuple[float, float], ...] = (
         (0.0, 100.0), (0.0, 100.0), (0.0, 100.0), (0.0, 100.0),
     )
-    seed: int = 20260923
+    seed: int = 20260916
     workers: int = 4
     round_timeout: float = 1.0
     mem_mb: int = 512
+
+    @property
+    def num_blocks(self) -> int:
+        return max(1, math.ceil(self.num_rounds / max(1, self.block_size)))
 
     def limits(self) -> SandboxLimits:
         return SandboxLimits(round_timeout=self.round_timeout, mem_mb=self.mem_mb)
@@ -50,16 +63,30 @@ class ShowdownSettings:
 
 @dataclass
 class LeaderboardRow:
+    """One bot's standing in one variation.
+
+    ``score`` is the ranking quantity: the sum of its iteration scores, each of
+    which is the sum of that iteration's four standardised block scores. The
+    figures reported alongside it are the ones the problem statement §8 asks for
+    — absolute profitability, survival, worst block, and consistency.
+    """
+
     key: str
     variation: int
     games: int = 0
+    blocks: int = 0
+    score: float = 0.0
+    mean_block_points: float = 0.0
+    mean_normalised_profit: float = 0.0
+    worst_normalised_profit: float = 0.0
+    normalised_profit_spread: float = 0.0
+    survival_rate: float = 1.0
     mean_net_profit: float = 0.0
     std_net_profit: float = 0.0
     best_net_profit: float = 0.0
     worst_net_profit: float = 0.0
     mean_final_capital: float = 0.0
     wins: int = 0
-    survival_rate: float = 1.0
     errors: int = 0
     timeouts: int = 0
     disqualified: bool = False
@@ -89,43 +116,60 @@ def _play_one(job: dict) -> list[dict]:
     result = play_group(
         specs,
         variation=job["variation"],
-        starting_capitals=job["capital"],
         block_bounds=job["block_bounds"],
         seed=job["seed"],
-        max_bid=job["max_bid"],
         num_rounds=job["num_rounds"],
+        block_size=job["block_size"],
+        group_size=job["group_size"],
+        capital_draw=CapitalDraw(**job["capital"]),
         limits=SandboxLimits(round_timeout=job["round_timeout"], mem_mb=job["mem_mb"]),
         tier=job.get("tier"),
     )
     return [asdict(o) for o in result.outcomes if not o.is_filler]
 
 
-def build_jobs(submissions: dict[int, list[BotSpec]], settings: ShowdownSettings) -> list[dict]:
-    """One job per (variation, repeat, group, starting capital)."""
+def build_jobs(
+    submissions: dict[int, list[BotSpec]],
+    settings: ShowdownSettings,
+    *,
+    seeding: dict[int, dict[str, float]] | None = None,
+) -> list[dict]:
+    """One job per (variation, iteration, group).
+
+    ``seeding`` maps a variation to each bot's cumulative score so far. It is
+    what iteration 3 balances groups with, and what the finals cut the field on.
+    """
     jobs: list[dict] = []
     for variation in settings.variations:
         specs = submissions.get(variation) or []
         if not specs:
             continue
-        for repeat in range(settings.repeats):
-            rng = random.Random(settings.seed + variation * 1000 + repeat)
-            for group_idx, group in enumerate(make_groups(specs, settings.group_size, rng)):
+
+        points = (seeding or {}).get(variation) or {}
+        if settings.grouping == "finals" and points:
+            specs = sorted(specs, key=lambda s: -points.get(s.key, 0.0))[: settings.finals_size]
+        group_seeding = points if settings.grouping in ("balanced", "finals") else None
+
+        for iteration in range(settings.iterations):
+            rng = random.Random(settings.seed + variation * 1000 + iteration)
+            groups = make_groups(specs, settings.group_size, rng, seeding=group_seeding)
+            for group_idx, group in enumerate(groups):
                 if not group:
                     continue
-                for cap_idx, capital in enumerate(settings.starting_capitals):
-                    jobs.append(
-                        {
-                            "specs": [(s.key, str(s.path)) for s in group],
-                            "variation": variation,
-                            "capital": capital,
-                            "block_bounds": [tuple(b) for b in settings.block_bounds],
-                            "seed": settings.seed + repeat * 97 + group_idx * 13 + cap_idx,
-                            "max_bid": settings.max_bid,
-                            "num_rounds": settings.num_rounds,
-                            "round_timeout": settings.round_timeout,
-                            "mem_mb": settings.mem_mb,
-                        }
-                    )
+                jobs.append(
+                    {
+                        "specs": [(s.key, str(s.path)) for s in group],
+                        "variation": variation,
+                        "block_bounds": [tuple(b) for b in settings.block_bounds],
+                        "seed": settings.seed + iteration * 97 + group_idx * 13 + variation,
+                        "num_rounds": settings.num_rounds,
+                        "block_size": settings.block_size,
+                        "group_size": settings.group_size,
+                        "capital": settings.capital.as_dict(),
+                        "round_timeout": settings.round_timeout,
+                        "mem_mb": settings.mem_mb,
+                    }
+                )
     return jobs
 
 
@@ -138,20 +182,29 @@ def aggregate(outcomes: list[BotOutcome]) -> list[LeaderboardRow]:
     rows: list[LeaderboardRow] = []
     for (key, variation), group in buckets.items():
         profits = [o.net_profit for o in group]
-        survived = sum(1 for o in group if o.eliminated_round is None)
+        points = [p for o in group for p in o.block_points]
+        pis = [p for o in group for p in o.block_profits]
+        blocks = sum(o.blocks_played for o in group)
+        survived = sum(o.blocks_survived for o in group)
         dq = [o for o in group if o.disqualified]
         rows.append(
             LeaderboardRow(
                 key=key,
                 variation=variation,
                 games=len(group),
+                blocks=blocks,
+                score=sum(o.iteration_score for o in group),
+                mean_block_points=statistics.fmean(points) if points else 0.0,
+                mean_normalised_profit=statistics.fmean(pis) if pis else 0.0,
+                worst_normalised_profit=min(pis) if pis else 0.0,
+                normalised_profit_spread=statistics.pstdev(pis) if len(pis) > 1 else 0.0,
+                survival_rate=(survived / blocks) if blocks else 1.0,
                 mean_net_profit=statistics.fmean(profits),
                 std_net_profit=statistics.pstdev(profits) if len(profits) > 1 else 0.0,
                 best_net_profit=max(profits),
                 worst_net_profit=min(profits),
                 mean_final_capital=statistics.fmean([o.final_capital for o in group]),
                 wins=sum(o.wins for o in group),
-                survival_rate=survived / len(group),
                 errors=sum(o.errors for o in group),
                 timeouts=sum(o.timeouts for o in group),
                 disqualified=bool(dq),
@@ -159,11 +212,13 @@ def aggregate(outcomes: list[BotOutcome]) -> list[LeaderboardRow]:
             )
         )
 
-    # Rank within each variation. A disqualified bot always sorts last.
+    # Rank within each variation on total score. A bot that played fewer
+    # iterations than the rest would score lower purely for that, so the mean
+    # block score breaks ties. A disqualified bot always sorts last.
     for variation in {r.variation for r in rows}:
         subset = sorted(
             [r for r in rows if r.variation == variation],
-            key=lambda r: (r.disqualified, -r.mean_net_profit),
+            key=lambda r: (r.disqualified, -r.score, -r.mean_block_points),
         )
         for position, row in enumerate(subset, start=1):
             row.rank = position
@@ -175,6 +230,7 @@ def run_showdown(
     settings: ShowdownSettings,
     *,
     progress=None,
+    seeding: dict[int, dict[str, float]] | None = None,
 ) -> ShowdownResult:
     """Play every game and return the ranked leaderboard.
 
@@ -182,7 +238,7 @@ def run_showdown(
     page can show a live bar.
     """
     started = time.time()
-    jobs = build_jobs(submissions, settings)
+    jobs = build_jobs(submissions, settings, seeding=seeding)
     outcomes: list[BotOutcome] = []
     errors: list[str] = []
 
@@ -221,11 +277,6 @@ def run_showdown(
 def estimate_seconds(n_bots: int, settings: ShowdownSettings, per_game: float = 15.0) -> float:
     """Rough wall-clock estimate, used to warn the admin before they hit Run."""
     groups = max(1, math.ceil(n_bots / max(1, settings.group_size)))
-    games = (
-        len(settings.variations)
-        * settings.repeats
-        * groups
-        * max(1, len(settings.starting_capitals))
-    )
+    games = len(settings.variations) * settings.iterations * groups
     scaled = per_game * (settings.num_rounds / 2000)
     return games * scaled / max(1, settings.workers)

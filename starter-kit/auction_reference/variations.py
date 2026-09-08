@@ -5,20 +5,34 @@ exactly how a round is simulated. Editing it changes nothing about how your
 submission is scored.
 """
 
-"""Payoff rules for the three auction variations (problem statement §4).
+"""Payoff rules for the four auction variations (problem statement §6).
 
-All three: the highest bid wins; ties -> everyone tied wins and each gets the
-full winner payoff. ``winning_bid`` below is the top bid amount.
+``X`` is the maximum value drawn by the players *active in that round* —
+bankrupt bots contribute no value, which is why the active count matters.
+``b1 >= b2 >= b3 >= ...`` are the bids sorted descending.
 
-Variation 1:  winner payoff = x_i - winning_bid        (winner's own value)
-Variation 2:  winner payoff = X   - winning_bid        (X = max x_i over ALL players)
-Variation 3:  winner payoff = X   - winning_bid
-              second-highest bidder pays half the winner's surplus:
-                  payoff_second = -0.5 * (X - winning_bid)
-                  clamped to 0 when  X - winning_bid < 0
+Variation 1 — private value, first price
+    winner: x_i - b1.  Everyone else zero. Ties: every tied bidder wins in full.
 
-Reference sample run (problem statement §10) — the test fixture:
-    x = [30, 50, 60], bids = [45, 55, 30], capital 100 each.
+Variation 2 — common value, first price
+    winner: X - b1.    Everyone else zero. Ties: every tied bidder wins in full.
+
+Variation 3 — common value with a runner-up penalty
+    winner: X - b1
+    rank 2: -0.5 * (X - b1), and zero when the winner's surplus is negative.
+    Ranks are distinct here, so ties are broken uniformly at random.
+
+Variation 4 — second-price top two, funded by ranks 3-5
+    If b1 <= X:  rank 1 takes X - b2, rank 2 takes X - b1, and ranks 3, 4 and 5
+    pay 0.5, 0.3 and 0.2 of the total the top two earned — so the round is
+    exactly zero-sum. Fewer than five active players: the shares are
+    renormalised over the ranks that exist; with two or fewer, no penalty is
+    collected at all.
+    If b1 > X:  the winner alone takes X - b1 (a loss) and nobody else is
+    touched. No penalties are collected.
+
+Reference sample run (problem statement §14) — the test fixture:
+    x = [30, 50, 60], bids = [45, 55, 30], capital 100 each, X = 60.
     Bot 2 (bid 55) wins; Bot 1 (bid 45) is second.
     V1: winner 50 - 55 = -5     -> caps [100,  95, 100]
     V2: winner 60 - 55 = +5     -> caps [100, 105, 100]
@@ -27,7 +41,16 @@ Reference sample run (problem statement §10) — the test fixture:
 
 from __future__ import annotations
 
-VARIATIONS = (1, 2, 3)
+VARIATIONS = (1, 2, 3, 4)
+
+#: Variations whose payoffs depend on X rather than the winner's own value.
+COMMON_VALUE = (2, 3, 4)
+
+#: Variations that need a strict rank order, so ties are broken at random.
+RANKED = (3, 4)
+
+#: What ranks 3, 4 and 5 pay in variation 4, as a share of the top two's take.
+V4_PENALTY_SHARES = {3: 0.5, 4: 0.3, 5: 0.2}
 
 
 def payoff_v1(winner_value: float, winning_bid: float) -> float:
@@ -36,7 +59,7 @@ def payoff_v1(winner_value: float, winning_bid: float) -> float:
 
 
 def payoff_v2(max_value: float, winning_bid: float) -> float:
-    """Variation 2 winner payoff: max value across all players minus the winning bid."""
+    """Variation 2 winner payoff: max active value minus the winning bid."""
     return float(max_value) - float(winning_bid)
 
 
@@ -46,12 +69,50 @@ def payoff_v3_winner(max_value: float, winning_bid: float) -> float:
 
 
 def payoff_v3_second(max_value: float, winning_bid: float) -> float:
-    """Variation 3 second-highest-bidder payoff: -0.5 * surplus, never positive.
+    """Variation 3 runner-up payoff: -0.5 * surplus, never positive.
 
-    If the winner's surplus (X - winning_bid) is negative, the second bidder pays
-    nothing.
+    If the winner's surplus (X - b1) is negative the runner-up pays nothing —
+    the penalty never turns into a reward for the winner's loss.
     """
     surplus = float(max_value) - float(winning_bid)
     if surplus < 0:
         return 0.0
     return -0.5 * surplus
+
+
+def payoff_v4(max_value: float, sorted_bids) -> list[float]:
+    """Variation 4 payoffs, returned by rank: index 0 is rank 1.
+
+    ``sorted_bids`` must already be in descending order and hold one entry per
+    active player. The caller maps rank positions back to players.
+    """
+    bids = [float(b) for b in sorted_bids]
+    payoffs = [0.0] * len(bids)
+    if len(bids) < 2:
+        # One active bidder is not an auction; the engine does not run such a
+        # round, and there is no rule in the problem statement for it either.
+        return payoffs
+
+    X = float(max_value)
+    b1, b2 = bids[0], bids[1]
+
+    if b1 > X:
+        # The winner overpaid. They alone eat the loss and no penalties are
+        # collected — the round is not zero-sum in this branch, by design.
+        payoffs[0] = X - b1
+        return payoffs
+
+    payoffs[0] = X - b2
+    payoffs[1] = X - b1
+    total = payoffs[0] + payoffs[1]
+
+    funded_ranks = [k for k in V4_PENALTY_SHARES if k <= len(bids)]
+    if not funded_ranks or total <= 0.0:
+        return payoffs
+
+    # Renormalise so the shares still sum to one when ranks 3-5 do not all
+    # exist; that is what keeps the round exactly zero-sum.
+    weight = sum(V4_PENALTY_SHARES[k] for k in funded_ranks)
+    for k in funded_ranks:
+        payoffs[k - 1] = -(V4_PENALTY_SHARES[k] / weight) * total
+    return payoffs
