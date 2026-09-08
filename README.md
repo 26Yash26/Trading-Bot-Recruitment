@@ -2,6 +2,9 @@
 
 Infrastructure for the Quant Guild Trading Bot competition — odd semester 2026.
 
+**Live:** <https://quantguildiitm.in> — deployed on the GCP VM behind nginx + TLS,
+`@smail.iitm.ac.in` Google sign-in, `bwrap` sandbox, showdown every two hours.
+
 Participants submit a Python bot. It is checked in a sandbox on upload, then
 every two hours the whole field replays a 2000-round sealed-bid auction and the
 public leaderboard is rewritten.
@@ -80,4 +83,11 @@ bombs, socket openers, filesystem readers, protocol-forging `print`s and
 
 Branch off `main`, do the work, merge back. `main` is deployed, so serve the
 site locally and eyeball it before merging anything that touches `index.html`,
-`web/` or `public/`. Sid runs all git/GitHub commands.
+`web/` or `public/`.
+
+Pushing to `main` triggers the deploy: GitHub Actions hard-resets
+`/var/www/html` on the VM, and a systemd path unit restarts the API (bounded
+stop, so a live leaderboard stream can't hang the restart). The VM's `nginx`
+and `systemd` config are installed once by `deploy/setup_vm.sh` (re-runnable);
+a plain push does not reinstall them, so changes under `deploy/` need that
+script re-run on the VM to take effect. See [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
