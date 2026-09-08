@@ -19,6 +19,12 @@ Thumbs.db
 
 # Local env / secrets
 .env
+*.env
+!*.env.example
+# Google OAuth client downloads — the real one lives outside the repo; this makes
+# sure a stray copy dropped in here can never be committed.
+client_secret*.json
+*_client_secret*.json
 
 # Real hidden competition config — never commit (see secret/README.md).
 # The template `secret/config.example.py` IS committed.
