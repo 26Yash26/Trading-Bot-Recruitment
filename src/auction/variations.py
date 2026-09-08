@@ -1,39 +1,50 @@
 """Payoff rules for the three auction variations (problem statement §4).
 
-All three: the highest bid wins; ties -> everyone tied wins. `bid` below is the
-winning bid amount.
+All three: the highest bid wins; ties -> everyone tied wins and each gets the
+full winner payoff. ``winning_bid`` below is the top bid amount.
 
-Variation 1:  winner payoff = x_i - bid           (winner's own value)
-Variation 2:  winner payoff = X   - bid           (X = max x_i over all players)
-Variation 3:  winner payoff = X   - bid
-              second-highest bidder pays 0.5 * (X - bid):
-                  payoff_second = -0.5 * (X - bid)
-                  if X - bid < 0:  payoff_second = 0
+Variation 1:  winner payoff = x_i - winning_bid        (winner's own value)
+Variation 2:  winner payoff = X   - winning_bid        (X = max x_i over ALL players)
+Variation 3:  winner payoff = X   - winning_bid
+              second-highest bidder pays half the winner's surplus:
+                  payoff_second = -0.5 * (X - winning_bid)
+                  clamped to 0 when  X - winning_bid < 0
 
-Reference sample run (problem statement §10) — used as the test fixture:
+Reference sample run (problem statement §10) — the test fixture:
     x = [30, 50, 60], bids = [45, 55, 30], capital 100 each.
     Bot 2 (bid 55) wins; Bot 1 (bid 45) is second.
-    V1: winner 50 - 55 = -5     -> caps [100, 95, 100]
+    V1: winner 50 - 55 = -5     -> caps [100,  95, 100]
     V2: winner 60 - 55 = +5     -> caps [100, 105, 100]
     V3: winner +5, second -2.5  -> caps [97.5, 105, 100]
-
-To implement (0.C):
-    payoff_v1(winner_value, winning_bid) -> float
-    payoff_v2(max_value, winning_bid) -> float
-    payoff_v3(max_value, winning_bid) -> (winner_payoff, second_payoff)
-    resolve(bids, values, variation) -> dict of per-player payoffs
 """
 
 from __future__ import annotations
 
-
-def payoff_v1(winner_value, winning_bid):
-    raise NotImplementedError("0.C")
+VARIATIONS = (1, 2, 3)
 
 
-def payoff_v2(max_value, winning_bid):
-    raise NotImplementedError("0.C")
+def payoff_v1(winner_value: float, winning_bid: float) -> float:
+    """Variation 1 winner payoff: own value minus the winning bid."""
+    return float(winner_value) - float(winning_bid)
 
 
-def payoff_v3(max_value, winning_bid):
-    raise NotImplementedError("0.C")
+def payoff_v2(max_value: float, winning_bid: float) -> float:
+    """Variation 2 winner payoff: max value across all players minus the winning bid."""
+    return float(max_value) - float(winning_bid)
+
+
+def payoff_v3_winner(max_value: float, winning_bid: float) -> float:
+    """Variation 3 winner payoff: same formula as V2."""
+    return float(max_value) - float(winning_bid)
+
+
+def payoff_v3_second(max_value: float, winning_bid: float) -> float:
+    """Variation 3 second-highest-bidder payoff: -0.5 * surplus, never positive.
+
+    If the winner's surplus (X - winning_bid) is negative, the second bidder pays
+    nothing.
+    """
+    surplus = float(max_value) - float(winning_bid)
+    if surplus < 0:
+        return 0.0
+    return -0.5 * surplus

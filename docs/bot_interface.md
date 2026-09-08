@@ -87,6 +87,13 @@ series keys if the team prefers._
    its capital `<= 0` (current assumption, `config.ELIMINATION_CAPITAL`) vs when it
    can no longer afford any positive bid. Eliminated bots don't return and aren't
    counted in `num_players`.
+6. ⚠️ **Decision needed — zero / tied-low bids.** The literal rules ("highest bid
+   wins; ties all win") mean that if *every* bid in a round is 0, the whole field
+   wins and each bot pockets `x_i - 0 = x_i` for free (V1) or `X` for free (V2/V3).
+   The engine currently implements this literally. Options: (a) keep it — bidding
+   is then a real game-theoretic race to not-be-undercut; (b) "no winner if the
+   top bid is 0"; (c) require a positive minimum bid. Same question applies to a
+   whole field tied at any value.
 
 ---
 

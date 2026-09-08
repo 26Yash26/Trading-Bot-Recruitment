@@ -1,24 +1,66 @@
 """Per-block value distributions.
 
-Each block of ``BLOCK_SIZE`` rounds draws every player's ``x_i`` from a uniform
-distribution ``U(lo, hi)`` whose bounds are hidden from players and change block
-to block. Bounds are passed in from ``secret/config.py`` — never hard-coded here.
+Each block of ``BLOCK_SIZE`` rounds draws every active player's ``x_i`` from a
+uniform distribution ``U(lo, hi)`` whose bounds are hidden from players and change
+block to block. Bounds are passed in (from ``secret/config.py`` in a real run) --
+never hard-coded here.
 
-To implement (0.C):
-    - ValueSampler(block_bounds: list[tuple[float, float]], seed: int)
-        .draw(round_idx: int, n_players: int) -> np.ndarray   # shape (n_players,)
-    - bounds indexed by round_idx // BLOCK_SIZE
-    - fully reproducible from `seed`
+Reproducible: the same ``seed`` gives the same draws, as long as ``draw`` is
+called once per round in round order.
 """
 
 from __future__ import annotations
+
+import numpy as np
+
+from .config import BLOCK_SIZE
 
 
 class ValueSampler:
     """Draws player values for each round. See module docstring."""
 
-    def __init__(self, block_bounds, seed):
-        raise NotImplementedError("0.C — implement per-block uniform sampling")
+    def __init__(self, block_bounds, seed, block_size: int = BLOCK_SIZE):
+        self._bounds = [(float(lo), float(hi)) for lo, hi in block_bounds]
+        if not self._bounds:
+            raise ValueError("block_bounds must have at least one (lo, hi) pair")
+        for lo, hi in self._bounds:
+            if hi < lo:
+                raise ValueError(f"invalid block bounds: hi ({hi}) < lo ({lo})")
+        self._block_size = int(block_size)
+        self._rng = np.random.default_rng(seed)
 
-    def draw(self, round_idx, n_players):
-        raise NotImplementedError
+    def bounds_for_round(self, round_idx: int):
+        """The (lo, hi) in force for ``round_idx``. The last block's bounds are
+        reused for any round beyond the supplied blocks."""
+        block = int(round_idx) // self._block_size
+        block = min(block, len(self._bounds) - 1)
+        return self._bounds[block]
+
+    def draw(self, round_idx: int, n_players: int) -> np.ndarray:
+        """A length-``n_players`` array of values for ``round_idx``."""
+        lo, hi = self.bounds_for_round(round_idx)
+        return self._rng.uniform(lo, hi, size=int(n_players))
+
+
+class FixedSampler:
+    """Test helper: returns pre-set values per round instead of sampling.
+
+    ``values_by_round[r]`` is the list of values for round ``r`` (one per active
+    player, in player order). Used by the engine tests to reproduce the problem
+    statement's sample run exactly.
+    """
+
+    def __init__(self, values_by_round):
+        self._values = [np.asarray(v, dtype=float) for v in values_by_round]
+
+    def bounds_for_round(self, round_idx: int):
+        v = self._values[int(round_idx)]
+        return (float(v.min()), float(v.max()))
+
+    def draw(self, round_idx: int, n_players: int) -> np.ndarray:
+        v = self._values[int(round_idx)]
+        if len(v) != n_players:
+            raise ValueError(
+                f"round {round_idx}: expected {n_players} values, got {len(v)}"
+            )
+        return v
