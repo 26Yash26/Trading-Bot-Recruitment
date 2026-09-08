@@ -131,23 +131,45 @@ fi
 
 # --- nginx -------------------------------------------------------------------
 log "nginx"
-if [[ -f "$ASSETS/nginx.conf" ]]; then
-    cp "$ASSETS/nginx.conf" /etc/nginx/sites-available/quantguild
+if [[ -f "$ASSETS/nginx.conf" && -f "$ASSETS/nginx-app.conf" ]]; then
+    # Snapshot what is live so a broken rollout can be undone completely.
+    BACKUP=/root/nginx-backup-$(date +%Y%m%d-%H%M%S)
+    mkdir -p "$BACKUP"
+    cp -a /etc/nginx/sites-available /etc/nginx/sites-enabled "$BACKUP"/ 2>/dev/null || true
+    ok "backed up nginx config to $BACKUP"
+
+    install -d -m 755 /etc/nginx/snippets
+    install -m 644 "$ASSETS/nginx-app.conf" /etc/nginx/snippets/quantguild-app.conf
+    install -m 644 "$ASSETS/nginx.conf"     /etc/nginx/sites-available/quantguild
     ln -sf /etc/nginx/sites-available/quantguild /etc/nginx/sites-enabled/quantguild
     rm -f /etc/nginx/sites-enabled/default
-    if nginx -t 2>/dev/null; then
-        systemctl reload nginx
-        ok "allowlist config active; default site removed"
-    else
-        warn "nginx -t FAILED — restoring the default site"
+
+    rollback_nginx() {
+        warn "rolling nginx back to the previous config"
         rm -f /etc/nginx/sites-enabled/quantguild
-        ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
-        systemctl reload nginx
-        nginx -t || true
+        cp -a "$BACKUP/sites-enabled/." /etc/nginx/sites-enabled/ 2>/dev/null || true
+        systemctl reload nginx || systemctl restart nginx || true
+    }
+
+    if ! nginx -t 2>&1 | tail -2; then
+        rollback_nginx; exit 1
+    fi
+    systemctl reload nginx
+    sleep 2
+
+    # `nginx -t` only proves the syntax parses. A config that dropped the TLS
+    # listener would validate perfectly and take HTTPS down, so check what the
+    # server actually answers before calling this a success.
+    http_ok=$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 http://localhost/ || echo 000)
+    tls_ok=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 8 https://localhost/ || echo 000)
+    if [[ "$http_ok" != "200" || "$tls_ok" != "200" ]]; then
+        warn "post-reload check failed (http=$http_ok https=$tls_ok)"
+        rollback_nginx
         exit 1
     fi
+    ok "allowlist active on 80 and 443 (http=$http_ok https=$tls_ok); default site removed"
 else
-    warn "nginx.conf not found next to this script — the document root is still exposed"
+    warn "nginx.conf / nginx-app.conf not found next to this script — document root still exposed"
 fi
 
 # --- belt and braces ---------------------------------------------------------
@@ -162,12 +184,20 @@ done
 
 # --- verify ------------------------------------------------------------------
 log "verification"
-for path in /.git/config /secret/config.py /server/store.py /harness/evaluate.py /conftest.py; do
-    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://localhost$path" || echo "---")
-    if [[ "$code" == "200" ]]; then warn "EXPOSED $path -> $code"; else ok "$path -> $code"; fi
+BASE=${QG_VERIFY_BASE:-https://quantguildiitm.in}
+fail=0
+for path in /.git/config /.git/HEAD /.git/index /secret/config.example.py /server/store.py \
+            /harness/evaluate.py /tests/test_engine.py /conftest.py /docs/BUILD_CHECKLIST.md \
+            /src/auction/engine.py /requirements.txt; do
+    code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 8 "$BASE$path" || echo "---")
+    if [[ "$code" == "200" ]]; then warn "STILL EXPOSED $path -> $code"; fail=1
+    else ok "$path -> $code"; fi
 done
-code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost/ || echo "---")
-ok "site / -> $code"
+for path in / /leaderboard /rules; do
+    code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 8 "$BASE$path" || echo "---")
+    ok "site $path -> $code"
+done
+(( fail == 0 )) && ok "nothing from the checkout is reachable" || warn "SOME PATHS ARE STILL PUBLIC"
 
 cat <<'DONE'
 
