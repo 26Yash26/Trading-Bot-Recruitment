@@ -2,7 +2,7 @@
 
 Nothing secret is committed and nothing secret is read from inside the web root.
 On the VM these come from ``/etc/quantguild.env`` (systemd ``EnvironmentFile``),
-which lives outside ``/var/www/html`` and is mode 600.
+which lives outside ``/var/www/html``, owned root:quantguild and mode 640.
 
 The data directory holds the SQLite database and every uploaded bot file. It
 **must not** be inside the deployed repo — the VM serves that directory as

@@ -273,7 +273,18 @@ async def api_submit(
 
     expected_roll = user["roll"] or roll_from_email(user["email"])
 
-    if expected_roll and expected_roll.upper() in {
+    # A smail address whose local part is not a roll number — a club or staff
+    # account. There is no roll to bind the upload to, so the filename check in
+    # `harness.validate` would have nothing to compare against and the file
+    # could claim any roll it liked. Refuse rather than skip the check.
+    if not expected_roll:
+        raise HTTPException(
+            status_code=403,
+            detail="This account has no roll number attached, so it cannot submit. "
+            "Sign in with your own smail address.",
+        )
+
+    if expected_roll.upper() in {
         r.upper() for r in settings.get("banned_rolls", [])
     }:
         raise HTTPException(status_code=403, detail="This roll number is blocked from submitting.")

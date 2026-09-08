@@ -18,13 +18,43 @@ from . import config
 _lock = threading.Lock()
 _hits: dict[tuple[str, str], deque] = defaultdict(deque)
 
+# A key is one (client, bucket) pair. Sweeping keeps a client that rotates its
+# apparent address from growing this dict without bound.
+_MAX_IDLE_SECONDS = 3600.0
+_SWEEP_EVERY_SECONDS = 300.0
+_last_sweep = 0.0
+
 
 def client_ip(request: Request) -> str:
-    """Real client address, trusting only the proxy hop nginx adds."""
+    """Real client address, trusting only the proxy hop nginx adds.
+
+    ``X-Real-IP`` is the one to believe: nginx sets it from ``$remote_addr``
+    with ``proxy_set_header``, which *replaces* anything the client sent.
+
+    ``X-Forwarded-For`` is not, because nginx builds it with
+    ``$proxy_add_x_forwarded_for`` — it *appends* the peer address to whatever
+    arrived. So its leftmost entry is whatever the client made up, and only the
+    rightmost entry is the hop nginx actually observed. Reading the left of it
+    would let anyone mint a fresh rate-limit bucket per request.
+    """
+    real = request.headers.get("x-real-ip", "").strip()
+    if real:
+        return real
     forwarded = request.headers.get("x-forwarded-for", "")
     if forwarded:
-        return forwarded.split(",")[0].strip()
+        return forwarded.split(",")[-1].strip()
     return request.client.host if request.client else "unknown"
+
+
+def _sweep_locked(now: float) -> None:
+    """Drop buckets nobody has touched lately. Caller holds ``_lock``."""
+    global _last_sweep
+    if now - _last_sweep < _SWEEP_EVERY_SECONDS:
+        return
+    _last_sweep = now
+    stale = [k for k, hits in _hits.items() if not hits or now - hits[-1] > _MAX_IDLE_SECONDS]
+    for key in stale:
+        del _hits[key]
 
 
 def rate_limit(request: Request, bucket: str, limit: int, window: float) -> None:
@@ -32,6 +62,7 @@ def rate_limit(request: Request, bucket: str, limit: int, window: float) -> None
     key = (client_ip(request), bucket)
     now = time.monotonic()
     with _lock:
+        _sweep_locked(now)
         hits = _hits[key]
         while hits and now - hits[0] > window:
             hits.popleft()

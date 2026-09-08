@@ -13,7 +13,7 @@ Group=quantguild
 WorkingDirectory=/var/www/html
 
 # Secrets (OAuth client, admin emails, public origin) — outside the web root,
-# mode 600, never committed. See deploy/quantguild.env.example.
+# root:quantguild 0640, never committed. See deploy/quantguild.env.example.
 EnvironmentFile=/etc/quantguild.env
 Environment=QG_DATA_DIR=/var/lib/quantguild
 Environment=QG_SERVE_STATIC=0
