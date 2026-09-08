@@ -10,6 +10,9 @@
 set -euo pipefail
 
 REPO=/var/www/html
+# Deploy assets are taken from this script's own directory, so it works both
+# from the deployed checkout and from a staging copy pushed ahead of the code.
+ASSETS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV=/opt/quantguild/venv
 DATA=/var/lib/quantguild
 SVC_USER=quantguild
@@ -71,8 +74,8 @@ log "secrets"
 if [[ -f /etc/quantguild.env ]]; then
     ok "/etc/quantguild.env exists (left untouched)"
 else
-    if [[ -f "$REPO/deploy/quantguild.env.example" ]]; then
-        cp "$REPO/deploy/quantguild.env.example" /etc/quantguild.env
+    if [[ -f "$ASSETS/quantguild.env.example" ]]; then
+        cp "$ASSETS/quantguild.env.example" /etc/quantguild.env
     else
         cat > /etc/quantguild.env <<'ENVEOF'
 QG_GOOGLE_CLIENT_ID=
@@ -91,17 +94,17 @@ ok "/etc/quantguild.env is root:$SVC_USER 0640 (outside the web root)"
 
 # --- deploy hook -------------------------------------------------------------
 log "deploy hook"
-if [[ -f "$REPO/deploy/apply-deploy.sh" ]]; then
-    install -m 755 "$REPO/deploy/apply-deploy.sh" /opt/quantguild/bin/apply-deploy.sh
+if [[ -f "$ASSETS/apply-deploy.sh" ]]; then
+    install -m 755 "$ASSETS/apply-deploy.sh" /opt/quantguild/bin/apply-deploy.sh
     ok "installed /opt/quantguild/bin/apply-deploy.sh"
 else
-    warn "deploy/apply-deploy.sh not in the checkout yet"
+    warn "apply-deploy.sh not found next to this script"
 fi
 
 # --- systemd -----------------------------------------------------------------
 log "systemd units"
-if compgen -G "$REPO/deploy/systemd/*" >/dev/null; then
-    install -m 644 "$REPO"/deploy/systemd/*.service "$REPO"/deploy/systemd/*.path /etc/systemd/system/
+if compgen -G "$ASSETS/systemd/*" >/dev/null; then
+    install -m 644 "$ASSETS"/systemd/*.service "$ASSETS"/systemd/*.path /etc/systemd/system/
     systemctl daemon-reload
     ok "units installed"
 
@@ -123,13 +126,13 @@ if compgen -G "$REPO/deploy/systemd/*" >/dev/null; then
         warn "server/ not deployed yet; leaving quantguild.service stopped"
     fi
 else
-    warn "deploy/systemd/ not in the checkout yet"
+    warn "systemd/ not found next to this script"
 fi
 
 # --- nginx -------------------------------------------------------------------
 log "nginx"
-if [[ -f "$REPO/deploy/nginx.conf" ]]; then
-    cp "$REPO/deploy/nginx.conf" /etc/nginx/sites-available/quantguild
+if [[ -f "$ASSETS/nginx.conf" ]]; then
+    cp "$ASSETS/nginx.conf" /etc/nginx/sites-available/quantguild
     ln -sf /etc/nginx/sites-available/quantguild /etc/nginx/sites-enabled/quantguild
     rm -f /etc/nginx/sites-enabled/default
     if nginx -t 2>/dev/null; then
@@ -144,7 +147,7 @@ if [[ -f "$REPO/deploy/nginx.conf" ]]; then
         exit 1
     fi
 else
-    warn "deploy/nginx.conf not in the checkout yet — the document root is still exposed"
+    warn "nginx.conf not found next to this script — the document root is still exposed"
 fi
 
 # --- belt and braces ---------------------------------------------------------
