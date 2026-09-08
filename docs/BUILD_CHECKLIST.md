@@ -32,9 +32,25 @@ here is fine.
   the web-server config before Phase 2.**
 
 ### 0.2 Git workflow
-- `main` = deployed. **No direct commits.**
-- Branches: `feat/<area>`, `fix/<area>`, `docs/<area>`, `chore/<area>`.
-- 1 PR → 1 review → **squash merge**.
+- **All git / GitHub commands are run by Sid.** Nobody else pushes or touches the remote.
+- **Commit identity:** commits are authored as `hedgestat`. One-time, in this repo:
+  ```
+  git config user.name  "hedgestat"
+  git config user.email "<hedgestat email>"
+  ```
+- `main` = deployed. **No direct commits to `main`.**
+- One task = one branch. Flow:
+  ```
+  git checkout main && git pull
+  git checkout -b feat/<area>        # branch off main
+  # ...do the work, commit in small steps...
+  git add -A && git commit -m "..."
+  git checkout main && git pull
+  git merge --no-ff feat/<area>      # merge back to main
+  git push origin main               # this triggers the deploy
+  git branch -d feat/<area>
+  ```
+  Branch prefixes: `feat/`, `fix/`, `docs/`, `chore/`.
 - Annotated tags at each milestone: `git tag -a v0.1.0 -m "..." && git push origin v0.1.0`
   - `v0.1.x` engine · `v0.2.x` launch (starter kit + site) · `v0.3.x` sandbox + reporting
   - `v0.4.x` harness · `v1.0.0` competition live
@@ -50,41 +66,29 @@ here is fine.
 Goal: participants can read the PS and download a starter kit that runs.
 
 ### 0.A Repo scaffold — `chore/scaffold`
-- [ ] `.gitignore` — `venv/`, `__pycache__/`, `*.pyc`, `*.log`, `logs/`, `.env`, `.DS_Store`, `.idea/`, `.vscode/`, run outputs
-- [ ] `requirements.txt` — `numpy`, `pandas`, `matplotlib`; dev: `pytest`, `psutil`
-- [ ] Dev-facing `README.md` (what the repo is, how to run tests, the "don't touch `.github`" note)
-- [ ] Folder skeleton per "Target layout" below, with `__init__.py` + stub `README.md`s
-- [ ] Tag `v0.0.1`
+- [x] `.gitignore` (Python, venvs, editors, `secret/config.py`, run artifacts)
+- [x] `requirements.txt` — `numpy`, `pandas`, `matplotlib`; dev: `pytest`, `psutil`
+- [x] `pyproject.toml` + root `conftest.py` (so `import src.auction…` works under pytest)
+- [x] Dev-facing `README.md` (path table, setup, test command, "don't touch `.github`" note)
+- [x] Folder skeleton — `src/auction/`, `starter-kit/`, `harness/`, `secret/`, `tests/`,
+      `public/`, `docs/`; every engine module is a stub with a docstring + signature that
+      raises `NotImplementedError`; every test file collects as `skip`
+- [x] `src/auction/config.py` fully populated (constants from the PS)
+- [ ] Tag `v0.0.1` after merge   ← _Sid_
+- [ ] Decide: keep `secret/config.py` git-ignored (current) vs version it   ← _team_
 
 ### 0.B Bot interface contract — `feat/bot-interface` — **BLOCKS EVERYTHING**
-- [ ] Write `docs/bot_interface.md` — the frozen contract participants code against
-- [ ] Decide shape of "highest & 2nd-highest bids of previous 100 rounds": scalars (max over
-      window) vs per-round lists (len ≤ 100). _Proposal: provide both._
-- [ ] Freeze the `Template.py` API. **Proposed:**
-  ```python
-  class Bot:
-      def __init__(self, bot_id, starting_capital, max_bid, num_players):
-          ...
-      def get_bid(self, obs) -> float:
-          # obs = {
-          #   'x': float,                # your private value this round
-          #   'round': int,              # 0-based
-          #   'capital': float,          # your capital right now
-          #   'num_players': int,        # players active THIS round
-          #   'max_bid': float,          # legal bid ceiling
-          #   'hist_highest': float|None,        # over last <=100 rounds
-          #   'hist_second': float|None,
-          #   'hist_highest_series': list[float], # per-round, oldest->newest
-          #   'hist_second_series': list[float],
-          # }
-          return 0.0
-  ```
-- [ ] Check nothing conflicting was already circulated on the guild WhatsApp
-- [ ] Confirm the `max_bid` value with organisers ("specified ahead of the competition")
-- [ ] Same interface serves all 3 variations (participant submits `<Rollno>_1.py` / `_2.py` / `_3.py`)
+- [x] `docs/bot_interface.md` written (marked PROVISIONAL)
+- [x] `starter-kit/Template.py` written to match it (class `Bot`, `__init__(config)`, `get_bid(obs)`)
+- [ ] **Team sign-off on the contract** — in particular: ⚠️ scalars-only vs scalars+series
+      for the 100-round bid history, and ⚠️ the exact elimination threshold. Scaffold
+      assumes scalars+series and `capital <= 0`; both are documented and easy to flip.
+- [ ] Check nothing conflicting was already circulated on the guild WhatsApp   ← _Sid_
+- [ ] Confirm the `max_bid` value with organisers → set `config.MAX_BID`   ← _Sid_
+- [x] Same interface serves all 3 variations (`variation` is in `config`; one file per variation)
 
 ### 0.C Reference simulator — minimum viable — `feat/engine-core`
-- [ ] `src/auction/config.py` — `NUM_ROUNDS=2000`, `BLOCK_SIZE=500`, `HISTORY_WINDOW=100`
+- [x] `src/auction/config.py` — `NUM_ROUNDS=2000`, `BLOCK_SIZE=500`, `HISTORY_WINDOW=100` (done in 0.A)
 - [ ] `src/auction/distributions.py` — blocked uniform, 4 blocks of 500, bounds passed in (never hard-coded), seed-reproducible
 - [ ] `src/auction/variations.py` — `payoff_v1`, `payoff_v2`, `payoff_v3`; V3 second-bidder rule with the `X - bid < 0 → 0` clamp
 - [ ] `src/auction/history.py` — rolling 100-round window of (highest, second) bids

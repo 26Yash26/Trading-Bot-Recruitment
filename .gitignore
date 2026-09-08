@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Virtual envs
+venv/
+.venv/
+env/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local env / secrets
+.env
+
+# Real hidden competition config — never commit (see secret/README.md).
+# The template `secret/config.example.py` IS committed.
+secret/config.py
+
+# Run artifacts
+logs/
+*.log
+runs/
+*.png
+!public/**/*.png
+results/
+submissions/
