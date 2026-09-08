@@ -1,0 +1,8 @@
+[project]
+name = "trading-bot-recruitment"
+version = "0.0.1"
+description = "Infrastructure for the Quant Guild Trading Bot competition (odd sem 2026)"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
