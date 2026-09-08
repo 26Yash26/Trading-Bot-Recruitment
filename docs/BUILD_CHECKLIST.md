@@ -89,14 +89,17 @@ Goal: participants can read the PS and download a starter kit that runs.
 
 ### 0.C Reference simulator — minimum viable — `feat/engine-core`
 - [x] `src/auction/config.py` — `NUM_ROUNDS=2000`, `BLOCK_SIZE=500`, `HISTORY_WINDOW=100` (done in 0.A)
-- [ ] `src/auction/distributions.py` — blocked uniform, 4 blocks of 500, bounds passed in (never hard-coded), seed-reproducible
-- [ ] `src/auction/variations.py` — `payoff_v1`, `payoff_v2`, `payoff_v3`; V3 second-bidder rule with the `X - bid < 0 → 0` clamp
-- [ ] `src/auction/history.py` — rolling 100-round window of (highest, second) bids
-- [ ] `src/auction/engine.py` — round loop: draw values → collect bids → legality (`bid>capital → 0`, clamp to `[0, max_bid]`) → winner(s) = max bid, ties all win → payoff → capital update → eliminate at capital `<= 0` → record history
-- [ ] `src/auction/player.py` — thin wrapper around a bot instance (no sandbox yet)
-- [ ] **Test against the PDF sample run** (`tests/test_variations.py`): 3 bots, x = 30/50/60, bids 45/55/30, cap 100 →
-      V1 winner −5 (→95); V2 winner +5 (→105); V3 winner +5, 2nd −2.5 (→97.5)
-- [ ] `run_local.py` — `python run_local.py --bot my_bot.py --variation 1` runs your bot vs the 3 sample bots, prints capital-over-time + net profit
+- [x] `src/auction/distributions.py` — `ValueSampler` (blocked uniform, seed-reproducible, last block reused past 2000) + `FixedSampler` test helper
+- [x] `src/auction/variations.py` — `payoff_v1/v2/v3_winner/v3_second`; V3 clamp at `X - bid < 0`
+- [x] `src/auction/history.py` — rolling window; per-round series + max-over-window scalars
+- [x] `src/auction/engine.py` — `run_game(...) -> GameResult`; round loop, ties-all-win, V3 second bidder, elimination, `capital_by_round`
+- [x] `src/auction/player.py` — bot wrapper: builds config, sanitises bids (type/NaN/neg → 0, clamp to max_bid, `>capital` → 0), catches bot exceptions → 0, tracks capital/wins/elimination
+- [x] `src/auction/loader.py` — load a `Bot` class from a .py path (shared by run_local + harness)
+- [x] **PDF sample run passes** (`tests/test_variations.py`): V1 →[100,95,100], V2 →[100,105,100], V3 →[97.5,105,100]
+- [x] `run_local.py` — `python run_local.py --bot my_bot.py --variation 1` vs the 3 sample bots; prints table + capital curve + your net profit
+- [x] `starter-kit/sample_bots/sample_bot_{1,2,3}.py` created (needed by run_local; pulled forward from 0.D)
+- [x] Tests: `test_variations` `test_engine` `test_distributions` `test_history` unskipped — **26 pass, 5 skip** (sandbox = 1.A)
+- [ ] ⚠️ raise the **zero-bid free-win** behaviour with the team (see docs/bot_interface.md rule 6) — set `MAX_BID` / elimination rule after that call
 
 ### 0.D Starter kit — `feat/starter-kit`
 - [ ] `starter-kit/Template.py` — frozen API from 0.B, trivial default (`bid = 0.5 * x`), heavy comments
@@ -217,6 +220,7 @@ Trading-Bot-Recruitment/
 │       ├── history.py
 │       ├── player.py
 │       ├── engine.py
+│       ├── loader.py                # load a Bot class from a .py path
 │       └── report.py
 ├── starter-kit/
 │   ├── Template.py                  # the ONLY file participants edit
@@ -250,6 +254,11 @@ Trading-Bot-Recruitment/
 - [ ] Web server config — does it serve the whole repo or just `index.html` + `public/`? (gates how `harness/` + `secret/` are protected)
 - [ ] Timeout mechanism: subprocess-per-bot (safe, slow) vs in-process signal (fast, leaky)
 - [ ] "prev 100 rounds bids" = scalars vs per-round series (proposal: both)
-- [ ] Exact elimination threshold for capital
-- [ ] Tie payoff: full payoff to each winner vs split
+- [ ] Exact elimination threshold for capital (engine: `capital <= 0`)
+- [ ] Tie payoff: full payoff to each winner vs split (engine: full to each)
+- [ ] **Zero-bid free-win**: whole field bids 0 → everyone "wins" and pockets `x_i`
+      for nothing. Keep (bidding = undercut race) / no winner at bid 0 / min bid?
+      (engine currently: keep — see `docs/bot_interface.md` rule 6)
+- [ ] V3 "second-highest bidder" when the top bid is a tie (engine: bidders at the
+      highest bid *strictly below* the winning bid; none if there is no lower bid)
 - [ ] `starter-kit.zip` committed vs release-built
