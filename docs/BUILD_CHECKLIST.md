@@ -59,8 +59,6 @@ they may read it) and have the private harness import/vendor it.
 | **Dev B** | sandbox/runtime wrapper, submission validation, **private** eval harness, integration tests |
 | **Dev C** | starter kit (Template, sample bots, participant README), website, build/zip pipeline, docs |
 
-_(fill in real names — Sid = Dev __)_
-
 ---
 
 ## Phase 0 — Launch-critical (before 09 Sep)
