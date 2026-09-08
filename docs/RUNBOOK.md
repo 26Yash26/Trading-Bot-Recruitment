@@ -48,6 +48,10 @@ pytest                # 86 tests
 pytest tests/test_sandbox.py -v   # the ones that matter
 ```
 
+Run this on Linux/macOS/WSL — the sandbox is POSIX-only, so on native Windows the
+bot-spawning tests skip (you'll see ~10 skips, 0 failures; the AST-policy tests
+still run). No CI runs `pytest` yet, so run it yourself before merging.
+
 ---
 
 ## VM setup (once)

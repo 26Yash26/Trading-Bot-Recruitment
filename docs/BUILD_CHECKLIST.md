@@ -57,6 +57,16 @@ runs `git reset --hard origin/main` inside `/var/www/html`.
 - Before merging anything that changes a deployed file, run `python -m server`
   and eyeball it.
 
+### 0.3 CI / running the tests
+- The only workflow is `deploy.yml`. **Nothing runs `pytest` automatically** —
+  run it yourself before every merge. Adding a test workflow means editing
+  `.github/`, which needs 26Yash26's sign-off.
+- The sandbox is POSIX-only. On native Windows the bot-spawning tests in
+  `tests/test_sandbox.py` skip themselves (~10 skips, 0 failures; the AST-policy
+  tests still run). Run the full suite on Linux / macOS / WSL.
+- [ ] Get sign-off to add a `pytest` workflow (`ubuntu-latest`, install
+      `requirements.txt`, `apt install bubblewrap`, run `pytest`)   ← _Sid_
+
 ---
 
 ## Phase 0 — Launch-critical
@@ -74,10 +84,12 @@ runs `git reset --hard origin/main` inside `/var/www/html`.
 - [ ] Tag `v0.0.1` after merge   ← _Sid_
 
 ### 0.B Bot interface contract
-- [x] `docs/bot_interface.md` written
-- [x] `starter-kit/Template.py` matches it
+- [x] `docs/bot_interface.md` written, now marked **FROZEN (shipped)**
+- [x] `starter-kit/Template.py` + `starter-kit/README.md` match it
 - [x] Same interface serves all 3 variations
-- [ ] **Team sign-off on the contract** — the ⚠️ items below
+- [x] API shape frozen by shipping the starter kit — `Bot(config)` / `get_bid(obs)`
+- [ ] Confirm the ⚠️ *engine-behaviour* decisions (see "Open decisions") — these
+      don't change the API, so they can be settled after launch
 - [ ] Check nothing conflicting was circulated on the guild WhatsApp   ← _Sid_
 
 ### 0.C Reference simulator

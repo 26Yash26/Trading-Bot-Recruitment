@@ -69,6 +69,10 @@ pytest
 bombs, socket openers, filesystem readers, protocol-forging `print`s and
 `__class__` escapes, and asserts each is contained.
 
+The sandbox is POSIX-only, so on **native Windows** the tests that spawn a bot
+process skip themselves (the AST-policy tests still run). Run the full suite on
+Linux, macOS or WSL. Nothing runs `pytest` in CI yet — do it before you merge.
+
 ## Documentation
 
 | Doc | What's in it |

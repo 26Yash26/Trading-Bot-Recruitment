@@ -1,8 +1,15 @@
 # Bot interface contract (0.B)
 
-**Status: PROVISIONAL — needs the team's sign-off before the PS goes out.**
-Open points are marked ⚠️. Once frozen, this is the contract participants code
-against and the engine, `run_local.py`, sample bots and harness all follow it.
+**Status: FROZEN (shipped).** The `Bot(config)` / `get_bid(obs) -> float` shape
+and every key below are what the engine, `run_local.py`, the sample bots, the
+harness, the sandbox child protocol and `starter-kit/README.md` all use — changing
+the shape now means re-releasing the starter kit.
+
+The ⚠️ items below are *engine-behaviour* decisions, not API changes. They can
+still be tuned (they're auction rules / admin settings), but doing so does not
+break any submission — a bot still just receives `obs` and returns a number.
+`starter-kit/README.md` is the participant-facing version of this document; keep
+the two in sync.
 
 ---
 
