@@ -1,0 +1,55 @@
+[Unit]
+Description=Quant Guild competition API and showdown scheduler
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=quantguild
+Group=quantguild
+
+# The deployed checkout. GitHub Actions hard-resets this directory on every push
+# to main; the code is read from here, but nothing writable lives here.
+WorkingDirectory=/var/www/html
+
+# Secrets (OAuth client, admin emails, public origin) — outside the web root,
+# mode 600, never committed. See deploy/quantguild.env.example.
+EnvironmentFile=/etc/quantguild.env
+Environment=QG_DATA_DIR=/var/lib/quantguild
+Environment=QG_SERVE_STATIC=0
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+ExecStart=/opt/quantguild/venv/bin/uvicorn server.app:app \
+    --host 127.0.0.1 --port 8000 \
+    --proxy-headers --forwarded-allow-ips 127.0.0.1 \
+    --log-level info
+
+Restart=always
+RestartSec=3
+
+# --- hardening -----------------------------------------------------------
+# The service spawns sandboxed bot processes, so it cannot be locked down as
+# hard as a plain web app: NoNewPrivileges and a private user namespace would
+# break bubblewrap, which is the thing actually containing participant code.
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+ReadWritePaths=/var/lib/quantguild
+
+# Bot processes are children of this unit; give the cgroup room but not the box.
+MemoryMax=4G
+TasksMax=512
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=quantguild
+
+[Install]
+WantedBy=multi-user.target

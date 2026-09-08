@@ -24,6 +24,10 @@ Thumbs.db
 # The template `secret/config.example.py` IS committed.
 secret/config.py
 
+# Local server state: SQLite database + uploaded bot files. Never deployed —
+# on the VM this lives in /var/lib/quantguild instead (see server/config.py).
+.local/
+
 # Run artifacts
 logs/
 *.log

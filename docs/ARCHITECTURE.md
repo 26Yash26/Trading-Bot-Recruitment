@@ -1,24 +1,109 @@
 # Architecture
 
-> Stub — fill in as the engine takes shape (0.C / 1.B).
+Four pieces that barely know about each other: an **engine** that plays one
+auction, a **sandbox** that runs untrusted bots, a **harness** that turns
+submissions into a leaderboard, and a **server** that puts it on the web.
+
+```
+                 browser (static SPA, no build step)
+                          │  fetch /api/…  ·  EventSource /api/leaderboard/stream
+                          ▼
+   nginx ──/web/ /public/──▶ files on disk
+     │
+     └──/api/──▶ server/app.py ──┬── server/store.py      SQLite: users, sessions,
+                                 │                        submissions, results, audit
+                                 ├── server/scheduler.py  the 2-hourly clock
+                                 └── server/events.py     SSE fan-out
+                                            │
+                                            ▼
+                                 harness/evaluate.py      groups × repeats × capitals
+                                            │             (ProcessPoolExecutor)
+                                            ▼
+                                 harness/simulate.py      one group, one game
+                                            │
+                       ┌────────────────────┴────────────────────┐
+                       ▼                                         ▼
+            src/auction/engine.py                       sandbox/runner.py
+            (the round loop)                            one child process per bot
+                                                                 │
+                                                                 ▼
+                                                        sandbox/child.py
+                                                        rlimits · no stdout · no net
+```
+
+## The join that makes this cheap
+
+The engine calls `bot_cls(config)` and then `.get_bid(obs)`. That is the *whole*
+contract, so `sandbox.runner.SandboxedBotFactory` — a callable returning an
+object with `get_bid` — drops into `run_game` with **no engine changes at all**.
+Sandboxing is invisible to the auction logic, and `run_local.py` keeps working
+with plain in-process classes.
+
+The same property handles failures: a timeout, a crash or a killed process all
+surface as an exception, and `auction.player.Player` already converts any
+exception from a bot into a bid of `0` plus an error count.
 
 ## Components
 
-```
-run_local.py ─┐                          participant self-test
-              ├─> src/auction/engine.run_game ──> GameResult
-harness/     ─┘        │
-                       ├─ distributions.ValueSampler   draw x_i per round (secret bounds)
-                       ├─ player.Player                bot wrapper: obs, get_bid, sandbox, capital
-                       ├─ variations                   V1 / V2 / V3 payoff rules
-                       └─ history.BidHistory           rolling 100-round bid window
-                       report                          summaries + plots + dumps
-```
+| Module | Job |
+|---|---|
+| `src/auction/config.py` | fixed PS constants |
+| `src/auction/distributions.py` | `ValueSampler` — blocked uniform, hidden bounds, seeded |
+| `src/auction/variations.py` | V1 / V2 / V3 payoff rules |
+| `src/auction/history.py` | rolling 100-round bid window |
+| `src/auction/player.py` | bot wrapper: bid sanitising, capital, elimination |
+| `src/auction/engine.py` | `run_game(...) -> GameResult` |
+| `src/auction/loader.py` | load a `Bot` class from a path (used by `run_local.py`) |
+| `sandbox/policy.py` | AST allowlist, applied at upload time |
+| `sandbox/child.py` | the process a bot runs in |
+| `sandbox/runner.py` | parent side: isolation tier, per-round timeout, disqualification |
+| `harness/simulate.py` | one sandboxed group game, plus grouping and filler bots |
+| `harness/validate.py` | accept/reject one submission |
+| `harness/evaluate.py` | a whole showdown, parallel across groups, aggregated and ranked |
+| `server/store.py` | SQLite |
+| `server/scheduler.py` | the clock; persists `next_run_at` |
+| `server/app.py` | API, OAuth, admin |
+| `web/` | the frontend |
 
-## Data flow per round
-draw values → build obs per active bot → collect + sanitise bids → pick winner(s)
-→ compute payoffs → update capital → eliminate broke bots → record round highs.
+## Data flow
+
+**One round** (`engine.run_game`): draw `x_i` for active players → build `obs`
+per bot → collect and sanitise bids → highest bid wins, ties all win → payoffs
+per variation → `capital += payoff` → eliminate at `capital <= 0` → record the
+round's top two bids.
+
+**One submission** (`POST /api/submit`): session and roll check → cooldown and
+rate limit → size and UTF-8 check → filename parse → AST policy → 120-round
+sandboxed game against the sample bots → accept (file written to
+`QG_DATA_DIR/submissions`, previous file for that variation deactivated) or
+reject with a reason.
+
+**One showdown** (`scheduler.run_once`): collect the latest accepted file per
+`(roll, variation)`, minus banned rolls → for each variation, repeat, group and
+starting capital, build a job → run the jobs across a process pool → aggregate
+per `(roll, variation)` into mean/std/best/worst net profit, wins, survival →
+rank → write to `results` → publish over SSE.
+
+## The frontend has no build step
+
+The VM serves files straight from the git checkout and has no node. So the site
+is hand-written ES modules plus one Tailwind stylesheet built by Tailwind's
+**standalone binary** (`scripts/build_css.sh`) and committed as
+`web/css/app.css`. There is no bundler, no `node_modules`, and nothing to
+install on the VM.
+
+Routing is history-API based; every unknown path renders `index.html`, which is
+also what keeps the document root safe (see `docs/SECURITY.md`).
+
+## Deployment
+
+GitHub Actions hard-resets `/var/www/html` to `origin/main`. That updates files
+but restarts nothing, and `.github/` is off limits by repo policy — so the VM
+watches for the deploy itself: `quantguild-deploy.path` triggers on
+`.git/FETCH_HEAD` changing and restarts the API. See `docs/RUNBOOK.md`.
 
 ## Key decisions
-Tracked in `docs/bot_interface.md` (⚠️ markers) and `docs/BUILD_CHECKLIST.md`
-("Open decisions").
+
+Tracked in `docs/BUILD_CHECKLIST.md` ("Open decisions") and
+`docs/bot_interface.md` (⚠️ markers). The security reasoning is in
+`docs/SECURITY.md`.

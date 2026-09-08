@@ -1,22 +1,39 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quant_Guild_Recruitment</title>
-    <style>
-        body { font-family: system-ui, sans-serif; background: #0f172a; color: #f8fafc; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
-        .card { background: #1e293b; padding: 2.5rem; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); max-width: 500px; text-align: center; border: 1px solid #334155; }
-        h1 { color: #38bdf8; margin-top: 0; }
-        p { color: #94a3b8; line-height: 1.6; }
-        .status { display: inline-block; padding: 6px 12px; background: #0369a1; color: #e0f2fe; border-radius: 20px; font-size: 0.85rem; font-weight: 600; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quant Guild · Trading Bot Recruitment</title>
+<meta name="description" content="Build a bidding bot, submit it, and watch it fight the field every two hours. Quant Guild recruitment, IIT Madras.">
+<meta name="theme-color" content="#07070a">
+<link rel="icon" href="/web/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/web/css/app.css">
 </head>
 <body>
-    <div class="card">
-        <span class="status">Live Status: Active</span>
-        <h1>Quant-Guild-Recruitment</h1>
-        <p>PS Launch on Wednesday (09/09/26)... Stay Tuned....</p>
-    </div>
+
+<!-- Animated trading-floor backdrop; purely decorative. -->
+<canvas id="backdrop" class="pointer-events-none fixed inset-0 -z-10 h-full w-full opacity-45" aria-hidden="true"></canvas>
+<div class="grid-backdrop pointer-events-none fixed inset-0 -z-10 opacity-25" aria-hidden="true"></div>
+<div class="hero-glow pointer-events-none fixed inset-0 -z-10" aria-hidden="true"></div>
+
+<a href="#app" class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-gold focus:px-4 focus:py-2 focus:font-semibold focus:text-void">Skip to content</a>
+
+<header id="nav" class="sticky top-0 z-40 border-b border-line/80 bg-void/80 backdrop-blur-xl"></header>
+
+<main id="app" class="min-h-[calc(100vh-8rem)]"></main>
+
+<footer class="border-t border-line/80 bg-void/60">
+  <div class="mx-auto flex max-w-6xl flex-col gap-3 px-5 py-8 text-sm text-ink-faint md:flex-row md:items-center md:justify-between">
+    <p>Quant Guild · IIT Madras — Trading Bot Recruitment, odd semester 2026.</p>
+    <p class="font-mono text-xs">Questions go to the guild WhatsApp group.</p>
+  </div>
+</footer>
+
+<div id="toasts" class="pointer-events-none fixed bottom-5 right-5 z-50 flex w-[min(24rem,calc(100vw-2.5rem))] flex-col gap-2"></div>
+
+<script type="module" src="/web/js/main.js"></script>
 </body>
 </html>

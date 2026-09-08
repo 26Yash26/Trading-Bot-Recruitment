@@ -1,0 +1,12 @@
+# Triggered by quantguild-deploy.path when GitHub Actions pushes a new commit
+# onto the VM. Reinstalls dependencies if requirements.txt moved, then restarts
+# the API so new code is actually running.
+
+[Unit]
+Description=Apply a Quant Guild deploy
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/quantguild/bin/apply-deploy.sh
+TimeoutStartSec=600

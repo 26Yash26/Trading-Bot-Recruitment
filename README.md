@@ -2,40 +2,82 @@
 
 Infrastructure for the Quant Guild Trading Bot competition — odd semester 2026.
 
-> **Note:** Do not modify `.github/` or the workflows folder. It is used to set up CI/CD.
-> On every push to `main`, the deploy workflow SSHes into the GCP VM and hard-resets
-> `/var/www/html` to `origin/main` — so **anything on `main` is live**.
+Participants submit a Python bot. It is checked in a sandbox on upload, then
+every two hours the whole field replays a 2000-round sealed-bid auction and the
+public leaderboard is rewritten.
+
+> **Do not modify `.github/`.** On every push to `main` the deploy workflow SSHes
+> into the GCP VM and hard-resets `/var/www/html` to `origin/main` — so
+> **anything on `main` is live**. The VM restarts the API itself via a systemd
+> path unit; the workflow does not need to change. See `docs/RUNBOOK.md`.
+
+## Run it locally
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+python -m scripts.seed_demo     # optional: 18 fake participants
+python -m server                # http://localhost:8000
+```
+
+One command serves the API and the site. Full instructions, including how to
+open the admin console without Google OAuth: [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
 
 ## What's here
 
-| Path | Purpose | Deployed? |
+| Path | Purpose | Web-exposed? |
 |---|---|---|
-| `index.html`, `public/` | Public landing page + downloads (PS PDF, starter kit) | yes |
-| `src/auction/` | The auction engine (round loop, distributions, payoff variations) | yes (participants may read it) |
-| `starter-kit/` | What participants download — `Template.py`, sample bots, participant README | yes |
-| `run_local.py` | Participant self-test: your bot vs the sample bots | yes |
-| `harness/` | Evaluation harness (validation, grouped sims, reports) | yes, but not web-exposed |
-| `secret/` | Hidden competition config — distribution bounds, grading capitals, seed | **`config.py` is git-ignored** |
-| `tests/` | Test suite | yes |
-| `docs/` | `BUILD_CHECKLIST.md`, `ARCHITECTURE.md`, `bot_interface.md` | yes |
+| `index.html`, `web/` | the site — hand-written SPA, no build step | **yes** |
+| `public/` | downloads: `starter-kit.zip` | **yes** |
+| `server/` | API, Google OAuth, showdown scheduler, SQLite | no — proxied at `/api` |
+| `sandbox/` | AST policy, per-bot child process, isolation tiers | no |
+| `harness/` | validation, grouped simulation, leaderboard aggregation | no |
+| `src/auction/` | the engine — round loop, distributions, payoff variations | no |
+| `starter-kit/` | what participants download | no (shipped in the zip) |
+| `secret/` | hidden bounds template — the real config lives in the database | no |
+| `scripts/` | `seed_demo.py`, `build_css.sh` | no |
+| `deploy/` | nginx config, systemd units, env template | no |
+| `tests/` | 86 tests | no |
+| `docs/` | architecture, security model, runbook, checklist, bot contract | no |
 
-## Setup
+"Web-exposed" is enforced by an allowlist in `deploy/nginx.conf`, not by
+convention — `/var/www/html` is a checkout of this whole repo, so everything
+else has to be unreachable by construction. See
+[`docs/SECURITY.md`](docs/SECURITY.md) §1.
 
-```
-python -m venv .venv
-.venv\Scripts\activate        # Windows
-# source .venv/bin/activate   # macOS / Linux
-pip install -r requirements.txt
-```
+## The stack
 
-## Run the tests
+- **Frontend** — ES modules and Tailwind v4, built by Tailwind's *standalone
+  binary*. No node, no npm, no `node_modules`, nothing to install on the VM.
+  Rebuild with `./scripts/build_css.sh` and commit `web/css/app.css`.
+- **Backend** — FastAPI + SQLite. Sessions are `HttpOnly` cookies; the OAuth
+  flow is `state`-protected and restricted to `@smail.iitm.ac.in`.
+- **Sandbox** — one process per bot, per-round timeout enforced by killing it,
+  `setrlimit` ceilings, and namespace isolation via bubblewrap (or Docker).
 
-```
+## Tests
+
+```bash
 pytest
 ```
 
+`tests/test_sandbox.py` is the important one: it submits infinite loops, memory
+bombs, socket openers, filesystem readers, protocol-forging `print`s and
+`__class__` escapes, and asserts each is contained.
+
+## Documentation
+
+| Doc | What's in it |
+|---|---|
+| [`docs/RUNBOOK.md`](docs/RUNBOOK.md) | run locally; stand up the VM; day-to-day operations |
+| [`docs/SECURITY.md`](docs/SECURITY.md) | threat model, the three sandbox layers, known gaps |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | how the four pieces fit together |
+| [`docs/BUILD_CHECKLIST.md`](docs/BUILD_CHECKLIST.md) | task list, milestones, open decisions |
+| [`docs/bot_interface.md`](docs/bot_interface.md) | the frozen participant contract |
+
 ## Working on this repo
 
-See [`docs/BUILD_CHECKLIST.md`](docs/BUILD_CHECKLIST.md) for the task list and the git
-workflow. Short version: branch off `main`, do the work, merge back to `main`. Sid runs
-all git/GitHub commands.
+Branch off `main`, do the work, merge back. `main` is deployed, so serve the
+site locally and eyeball it before merging anything that touches `index.html`,
+`web/` or `public/`. Sid runs all git/GitHub commands.
