@@ -23,10 +23,16 @@ Environment=PYTHONDONTWRITEBYTECODE=1
 ExecStart=/opt/quantguild/venv/bin/uvicorn server.app:app \
     --host 127.0.0.1 --port 8000 \
     --proxy-headers --forwarded-allow-ips 127.0.0.1 \
+    --timeout-graceful-shutdown 10 \
     --log-level info
 
 Restart=always
 RestartSec=3
+
+# The leaderboard is a long-lived SSE stream whose handler only wakes on its
+# 20s keepalive, so it will not return promptly on shutdown. Bound the stop so a
+# deploy restart never hangs: uvicorn drains for up to 10s, then systemd kills.
+TimeoutStopSec=15
 
 # --- hardening -----------------------------------------------------------
 # The service spawns sandboxed bot processes, so it cannot be locked down as
