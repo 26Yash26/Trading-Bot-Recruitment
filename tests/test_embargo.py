@@ -91,12 +91,112 @@ def test_kit_says_nothing_about_unreleased_variations():
         assert phrase not in lowered, f"starter kit leaks {phrase!r}"
 
 
+def test_committed_zip_is_what_a_fresh_build_produces(tmp_path):
+    """The shipped archive must be the current sources, not last week's.
+
+    `test_kit_contains_only_allowed_files` only compares NAMES, so editing
+    `Template.py` and forgetting `python build_kit.py` shipped a stale kit with
+    every test still green. Compare the bytes of each member instead — the zip's
+    own container bytes differ run to run (timestamps), so they are not
+    comparable, but its contents are.
+    """
+    fresh = build_kit.build(output=tmp_path / "fresh.zip")
+    with zipfile.ZipFile(fresh) as built, zipfile.ZipFile(KIT_ZIP) as shipped:
+        assert sorted(built.namelist()) == sorted(shipped.namelist())
+        stale = [
+            name for name in built.namelist()
+            if built.read(name) != shipped.read(name)
+        ]
+    assert not stale, (
+        "public/starter-kit.zip is out of date for: " + ", ".join(stale) +
+        "\n  rerun `python build_kit.py` and commit the zip"
+    )
+
+
+def test_late_kit_is_staged_outside_the_shipped_directory():
+    """The V3/V4 material must not live under `starter-kit/` before release.
+
+    Everything in that directory is one careless `ALLOWED` edit from being
+    published. Staging elsewhere is what makes the pre-release kit safe by
+    construction rather than by vigilance.
+    """
+    assert build_kit.LATE_DIR.is_dir(), "late-kit/ is missing"
+    for name in build_kit.LATE_ALLOWED:
+        assert (build_kit.LATE_DIR / name).is_file(), f"late-kit/{name} is missing"
+    # `local_test.py` maps onto itself on purpose — the four-variation runner
+    # replaces the two-variation one. Everything else must be genuinely new.
+    added = set(build_kit.LATE_ALLOWED.values()) - {"local_test.py"}
+    assert not (added & set(build_kit.ALLOWED)), (
+        "late-kit files already ship in the pre-release kit: "
+        + ", ".join(sorted(added & set(build_kit.ALLOWED)))
+    )
+
+
+def test_nginx_blocks_the_late_kit_directory():
+    conf = (REPO_ROOT / "deploy" / "nginx-app.conf").read_text(encoding="utf-8")
+    blocked = re.search(r"location ~ \^/\(\?:([^)]+)\)", conf)
+    assert blocked, "could not find the deny-list location block in nginx-app.conf"
+    assert "late-kit" in blocked.group(1).split("|")
+
+
+def test_prerelease_build_ships_nothing_from_the_late_kit(tmp_path):
+    """Belt and braces over the embargo grep: the late files must be absent."""
+    archive_path = build_kit.build(output=tmp_path / "prerelease.zip")
+    with zipfile.ZipFile(archive_path) as archive:
+        names = {n.split("/", 1)[1] for n in archive.namelist()}
+    assert names == set(build_kit.ALLOWED)
+    assert "Template_3.py" not in names
+    assert "Template_4.py" not in names
+    assert "README_v3_v4.md" not in names
+
+
+def test_release_build_adds_the_late_variations(tmp_path):
+    """`--release-v3-v4` is the switch that publishes them, and it must work."""
+    archive_path = build_kit.build(released=True, output=tmp_path / "released.zip")
+    with zipfile.ZipFile(archive_path) as archive:
+        names = {n.split("/", 1)[1] for n in archive.namelist()}
+        readme = archive.read("trading-bot-starter-kit/README.md").decode("utf-8")
+        runner = archive.read("trading-bot-starter-kit/local_test.py").decode("utf-8")
+
+    assert names == set(build_kit.ALLOWED) | set(build_kit.LATE_ALLOWED.values())
+    assert build_kit.EMBARGO_NOTICE not in readme, "the released kit still says V1/V2 only"
+    assert build_kit.RELEASED_NOTICE in readme
+    # The four-variation runner replaces the two-variation one, same filename.
+    assert "choices=(1, 2, 3, 4)" in runner
+
+
+def test_release_readme_swap_fails_loudly_if_the_notice_is_reworded(tmp_path):
+    """Silently shipping a kit that says 'variations 1 and 2 only' next to a
+    `Template_4.py` is worse than failing the build."""
+    readme = build_kit.KIT_DIR / "README.md"
+    original = readme.read_text(encoding="utf-8")
+    try:
+        readme.write_text(original.replace(build_kit.EMBARGO_NOTICE, "> reworded"),
+                          encoding="utf-8")
+        with pytest.raises(SystemExit, match="embargo notice"):
+            build_kit.build(released=True, output=tmp_path / "x.zip")
+    finally:
+        readme.write_text(original, encoding="utf-8")
+
+
 def test_build_kit_refuses_unexpected_files(tmp_path, monkeypatch):
     """An engine file dropped into `starter-kit/` must fail the build, loudly."""
     stray = build_kit.KIT_DIR / "_stray_test_file.py"
     stray.write_text("# left here by accident\n", encoding="utf-8")
     try:
         with pytest.raises(SystemExit, match="unexpected files"):
+            build_kit.collect()
+    finally:
+        stray.unlink()
+
+
+def test_build_kit_refuses_unexpected_late_kit_files():
+    """`late-kit/` is audited on every build, released or not — a stray engine
+    file there is a leak waiting for someone to flip the release switch."""
+    stray = build_kit.LATE_DIR / "_stray_test_file.py"
+    stray.write_text("# left here by accident\n", encoding="utf-8")
+    try:
+        with pytest.raises(SystemExit, match="unexpected files under late-kit"):
             build_kit.collect()
     finally:
         stray.unlink()
@@ -115,6 +215,74 @@ def test_build_kit_refuses_embargoed_content():
             build_kit.build()
     finally:
         template.write_text(original, encoding="utf-8")
+
+
+# --- the scoring document -------------------------------------------------------
+
+SCORING_PUBLIC = REPO_ROOT / "docs" / "scoring-public.pdf"
+SCORING_FULL = REPO_ROOT / "docs" / "scoring.pdf"
+
+
+def _pdf_text(path: Path) -> str:
+    """The PDF's text, lowercased. Skips the test if poppler is not installed."""
+    import shutil
+    import subprocess
+
+    if shutil.which("pdftotext") is None:
+        pytest.skip("pdftotext (poppler) is not installed")
+    out = subprocess.run(
+        ["pdftotext", str(path), "-"], capture_output=True, text=True, check=True
+    )
+    return out.stdout.lower()
+
+
+def test_both_scoring_pdfs_are_committed():
+    """The VM has no TeX install, so the API serves these out of the checkout."""
+    assert SCORING_PUBLIC.is_file(), "run ./scripts/build_docs.sh and commit the PDFs"
+    assert SCORING_FULL.is_file(), "run ./scripts/build_docs.sh and commit the PDFs"
+
+
+def test_the_public_scoring_pdf_says_nothing_about_unreleased_variations():
+    """This is the one that goes out before mock auction 1."""
+    text = _pdf_text(SCORING_PUBLIC)
+    for phrase in GIVEAWAYS:
+        assert phrase not in text, f"scoring-public.pdf leaks {phrase!r}"
+
+
+def test_the_full_scoring_pdf_actually_describes_them():
+    """Otherwise the `\\ifreleased` guards are wrong in the other direction and
+    the released document is silently missing half its subject."""
+    text = _pdf_text(SCORING_FULL)
+    assert "runner-up penalty" in text
+    assert "funded second price" in text
+
+
+def test_the_scoring_pdf_is_gated_the_same_way_late_js_is(client):
+    """It carries the V3 and V4 payoff rules, so before release the full
+    document must not be reachable — the public variant is served instead."""
+    store.update_settings({"variations": [1, 2]})
+    before = client.get("/api/docs/scoring.pdf")
+    assert before.status_code == 200
+    assert before.headers["content-type"] == "application/pdf"
+
+    store.update_settings({"variations": [1, 2, 3]})
+    after = client.get("/api/docs/scoring.pdf")
+    assert after.status_code == 200
+    assert len(after.content) != len(before.content), (
+        "the same PDF is served before and after release — the gate does nothing"
+    )
+    assert after.content == SCORING_FULL.read_bytes()
+    assert before.content == SCORING_PUBLIC.read_bytes()
+
+
+def test_the_scoring_pdfs_are_not_served_as_static_files():
+    """They live under `docs/`, which nginx blocks. A copy under `public/` would
+    be one filename guess away from defeating the gate entirely."""
+    assert not (REPO_ROOT / "public" / "scoring.pdf").exists()
+    assert not (REPO_ROOT / "web" / "scoring.pdf").exists()
+    conf = (REPO_ROOT / "deploy" / "nginx-app.conf").read_text(encoding="utf-8")
+    blocked = re.search(r"location ~ \^/\(\?:([^)]+)\)", conf)
+    assert "docs" in blocked.group(1).split("|")
 
 
 # --- what the browser is served -------------------------------------------------

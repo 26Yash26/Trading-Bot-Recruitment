@@ -134,6 +134,13 @@ scores and a bot's total is the sum over iterations. See `src/auction/scoring.py
 
 ## Reference
 
-`starter-kit/Template.py` is the canonical runnable copy of this contract.
-`starter-kit/auction_reference/` is a read-only copy of `src/auction/`, generated
-by `build_kit.py`, so participants can see exactly how a round is simulated.
+`starter-kit/Template.py` is the canonical runnable copy of this contract for
+variations 1 and 2; `late-kit/Template_3.py` and `late-kit/Template_4.py` are
+the same for 3 and 4, staged outside the shipped directory until mock auction 1
+releases them (`python build_kit.py --release-v3-v4`).
+
+The kit ships **no engine source**. It used to carry a generated
+`starter-kit/auction_reference/` copy of `src/auction/`, which handed over the
+tie-break tolerance, the elimination rule, the group size, the iteration count
+and both unreleased variations; it was removed in favour of a black-box local
+runner. Participants get the published rules and `local_test.py`.
