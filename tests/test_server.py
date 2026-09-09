@@ -7,6 +7,9 @@ the question that decides whether `secret/` is on the internet.
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -241,6 +244,63 @@ def test_a_switched_off_variation_refuses_uploads(as_user):
         assert "not in play" in response.json()["detail"]
     finally:
         store.update_settings({"variations": [1, 2]})
+
+
+# --- the whole submit path, end to end -------------------------------------
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="sandbox child-process IPC is POSIX-only",
+)
+class TestSubmitEndToEnd:
+    """A real bot, through the real HTTP path, against whatever the store
+    actually holds for `block_bounds` right now.
+
+    Regression: this exact request 500'd on production for every participant.
+    `harness.validate.validate()` fed the admin's stored `block_bounds`
+    straight to `ValueSampler`, which only understands a flat schedule; the
+    moment the stored default became the nested per-iteration shape (§9), the
+    unpack inside `ValueSampler.__init__` raised and FastAPI's default handler
+    turned that into a bare "Internal Server Error" — a response the frontend
+    then displayed as if the participant's own file had been rejected.
+
+    `tests/test_distributions.py::TestValidateHandlesEveryStoredShape` pins the
+    same bug below the sandbox; this pins it at the boundary a participant
+    actually hits, using the store's real, current settings rather than a
+    hand-built one — so a future change to `DEFAULT_SETTINGS` that reintroduces
+    an incompatible shape fails here too.
+    """
+
+    def _bot_source(self) -> bytes:
+        path = (
+            Path(__file__).resolve().parent.parent
+            / "starter-kit" / "sample_bots" / "sample_bot_1.py"
+        )
+        return path.read_bytes()
+
+    def test_a_good_bot_is_never_met_with_a_bare_500(self, as_user):
+        before = store.get_settings()
+        try:
+            store.update_settings({"submissions_open": True, "variations": [1, 2]})
+            response = as_user.post(
+                "/api/submit",
+                files={"file": ("ME24B152_1.py", self._bot_source())},
+                headers=ORIGIN,
+            )
+        finally:
+            store.update_settings(
+                {"submissions_open": before["submissions_open"], "variations": before["variations"]}
+            )
+
+        assert response.status_code != 500, (
+            f"a well-formed bot must never crash the check: {response.text[:300]}"
+        )
+        # Whatever the verdict, it must be JSON with a message a participant can
+        # act on — never nginx/Starlette's plain-text "Internal Server Error".
+        body = response.json()
+        assert "message" in body or "detail" in body
+        assert "internal server error" not in str(body).lower()
 
 
 # --- cross-origin --------------------------------------------------------------

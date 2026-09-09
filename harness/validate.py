@@ -19,6 +19,7 @@ from pathlib import Path
 from sandbox.policy import check_source, describe
 from sandbox.runner import SandboxLimits
 from src.auction.capital import CapitalDraw
+from src.auction.distributions import normalise_block_bounds
 
 from .simulate import BotSpec, play_group
 
@@ -88,11 +89,21 @@ def validate(
             variation=variation,
         )
 
+    # `block_bounds` comes straight off the admin settings, which may hold either
+    # a flat schedule or one schedule per tournament iteration (§9) — see
+    # `normalise_block_bounds`. This smoke test only ever plays one game, so it
+    # always takes iteration 0's schedule; a malformed setting is refused with a
+    # ValueError rather than reaching ValueSampler and crashing the request.
+    try:
+        schedules = normalise_block_bounds(block_bounds or [(0.0, 100.0)])
+    except ValueError:
+        schedules = normalise_block_bounds([(0.0, 100.0)])
+
     # A short game against the sample bots: does it start, survive, and bid legally?
     result = play_group(
         [BotSpec(key=roll, path=tmp_path)],
         variation=variation,
-        block_bounds=block_bounds or [(0.0, 100.0)],
+        block_bounds=schedules[0],
         seed=12345,
         num_rounds=SMOKE_ROUNDS,
         block_size=block_size,

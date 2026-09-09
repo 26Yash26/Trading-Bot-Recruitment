@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 import secrets
 import time
 from contextlib import asynccontextmanager
@@ -47,6 +48,8 @@ async def lifespan(_app: FastAPI):
     yield
     await scheduler.stop()
 
+
+log = logging.getLogger("quantguild")
 
 app = FastAPI(
     title="Quant Guild — Trading Bot Recruitment",
@@ -405,16 +408,44 @@ async def api_submit(
             round_timeout=float(settings.get("round_timeout", 1.0)),
             mem_mb=int(settings.get("mem_mb", 512)),
         )
-        result = await asyncio.get_running_loop().run_in_executor(
-            None,
-            lambda: validate(
-                filename, source, tmp_path,
-                expected_roll=expected_roll,
-                block_bounds=settings.get("block_bounds"),
-                capital_draw=CapitalDraw.from_settings(settings),
-                limits=limits,
-            ),
-        )
+        try:
+            result = await asyncio.get_running_loop().run_in_executor(
+                None,
+                lambda: validate(
+                    filename, source, tmp_path,
+                    expected_roll=expected_roll,
+                    block_bounds=settings.get("block_bounds"),
+                    capital_draw=CapitalDraw.from_settings(settings),
+                    limits=limits,
+                ),
+            )
+        except Exception:
+            # validate() rejecting a bad bot returns ValidationResult(ok=False) —
+            # it never raises for that. A raise here means OUR settings or code
+            # are broken (this is exactly how a malformed block_bounds surfaced:
+            # https://github.com/26Yash26/Trading-Bot-Recruitment — fixed in
+            # harness/validate.py, but nothing should ever again be able to turn
+            # a config mistake into a bare "Internal Server Error" that reads as
+            # if the participant's file were at fault). Log it for us, and tell
+            # them plainly that it is not their bug.
+            log.exception("submission check crashed for %s", filename)
+            store.record_submission(
+                roll=roll, variation=variation, email=user["email"], name=user["name"],
+                filename=filename, path="", sha256=hashlib.sha256(contents).hexdigest(),
+                size=len(contents), status="error",
+                message="Server-side check crashed", smoke_profit=0.0,
+            )
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "message": (
+                        "The check crashed on our side — not a problem with your file. "
+                        "We've logged it. Try again in a minute, and flag it on the "
+                        "guild group if it keeps happening."
+                    ),
+                },
+                status_code=500,
+            )
 
         digest = hashlib.sha256(contents).hexdigest()
 

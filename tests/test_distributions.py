@@ -134,3 +134,50 @@ class TestBoundsPerIteration:
         """Four identical blocks would switch off the regime-change problem."""
         blocks = ShowdownSettings().bounds_for_iteration(0)
         assert len(set(blocks)) > 1, "the default schedule has nothing to detect"
+
+
+class TestValidateHandlesEveryStoredShape:
+    """Regression: `/api/submit` 500'd for every participant on 09/09.
+
+    `harness.validate.validate()` used to hand `block_bounds` straight to
+    `ValueSampler`, which only understands a flat `[(lo, hi), ...]` schedule.
+    The moment `server.store.DEFAULT_SETTINGS["block_bounds"]` became the
+    nested per-iteration shape from `bounds_for_iteration` (§9), every upload
+    hit `ValueError: too many values to unpack` inside the request handler and
+    came back as a bare "Internal Server Error" — correct-looking code, wrong
+    shape of data, and nothing here would have caught it since `validate()` had
+    no test of its own.
+
+    This does not need the sandbox: it fails at `ValueSampler.__init__`, before
+    any bot ever runs, so it is pinned at that level and runs on every platform.
+    """
+
+    @pytest.mark.parametrize(
+        "shape",
+        [
+            pytest.param(
+                [[0.0, 100.0], [40.0, 60.0], [0.0, 400.0], [5.0, 25.0]],
+                id="flat-schedule",
+            ),
+            pytest.param(
+                [
+                    [[0.0, 100.0], [40.0, 60.0], [0.0, 400.0], [5.0, 25.0]],
+                    [[10.0, 30.0], [0.0, 250.0], [60.0, 90.0], [0.0, 50.0]],
+                ],
+                id="nested-per-iteration",
+            ),
+            pytest.param(None, id="none"),
+        ],
+    )
+    def test_every_shape_normalises_to_something_valuesampler_accepts(self, shape):
+        schedules = normalise_block_bounds(shape or [(0.0, 100.0)])
+        # This is the exact call `ValueSampler.__init__` makes; the bug was a
+        # `ValueError` raised right here, before a bot was ever loaded.
+        assert all(len(pair) == 2 for pair in schedules[0])
+
+    def test_the_actual_stored_default_does_not_crash(self):
+        """Not a synthetic shape — the literal value a fresh database holds."""
+        from server.store import DEFAULT_SETTINGS
+
+        schedules = normalise_block_bounds(DEFAULT_SETTINGS["block_bounds"])
+        ValueSampler(schedules[0], seed=12345, block_size=120)
