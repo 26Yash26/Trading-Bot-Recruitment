@@ -24,6 +24,7 @@ from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+from harness.evaluate import GROUPINGS
 from harness.validate import ROLL_RE, parse_filename, validate
 from sandbox.runner import SandboxLimits, detect_isolation
 from src.auction.capital import CapitalDraw
@@ -240,7 +241,11 @@ def public_state() -> dict:
         "counts": store.submission_counts(),
         "last_showdown": {
             "id": latest["id"], "finished_at": latest["finished_at"], "games": latest["games"],
+            "kind": latest.get("kind", store.DEFAULT_KIND),
         } if latest else None,
+        # Mock and final boards are published artefacts and stay reachable after
+        # the next practice run has replaced the live one.
+        "published_showdowns": store.published_showdowns(),
     }
 
 
@@ -250,8 +255,32 @@ def api_state():
 
 
 @app.get("/api/leaderboard")
-def api_leaderboard():
-    return {"rows": store.leaderboard(), "state": scheduler.state()}
+def api_leaderboard(showdown: int | None = None):
+    """The live board, or an archived one by id.
+
+    An id is only honoured for a finished **mock or final** run. Practice boards
+    are not addressable: there are hundreds of them, they mean nothing, and
+    handing out an id for one invites a stale link being passed around as a
+    result.
+    """
+    if showdown is None:
+        return {"rows": store.leaderboard(), "state": scheduler.state(), "showdown": None}
+
+    published = {int(row["id"]): row for row in store.published_showdowns(limit=200)}
+    row = published.get(int(showdown))
+    if row is None:
+        raise HTTPException(status_code=404, detail="No published showdown with that id.")
+    return {
+        "rows": store.leaderboard(int(showdown)),
+        "state": scheduler.state(),
+        "showdown": row,
+    }
+
+
+@app.get("/api/showdowns")
+def api_showdowns():
+    """Every published (mock or final) board, newest first."""
+    return {"showdowns": store.published_showdowns()}
 
 
 @app.get("/api/leaderboard/stream")
@@ -314,6 +343,40 @@ def api_late_variations():
         media_type="text/javascript",
         # Released mid-competition, so it must not be cached as a 404 and must
         # not be cached as content once a later variation changes.
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+DOCS_DIR = Path(__file__).resolve().parent.parent / "docs"
+
+
+@app.get("/api/docs/scoring.pdf")
+def api_scoring_pdf():
+    """The scoring specification, in the variant this stage of the event allows.
+
+    `docs/scoring.tex` builds twice (`scripts/build_docs.sh`): a public PDF
+    covering variations 1 and 2, and a full one covering all four. Which is
+    served follows the same switch as `late.js` — before release the full
+    document simply is not reachable, so the V3 and V4 payoff rules cannot be
+    read out of it.
+
+    Served from `docs/`, which nginx blocks, rather than `public/`, which it
+    hands out unconditionally. A file under `public/` would be one filename guess
+    away from defeating the gate entirely.
+    """
+    settings = store.get_settings()
+    in_play = {int(v) for v in settings.get("variations", [])}
+    released = bool(in_play.intersection(LATE_VARIATIONS))
+
+    path = DOCS_DIR / ("scoring.pdf" if released else "scoring-public.pdf")
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Not found")
+
+    return FileResponse(
+        path,
+        media_type="application/pdf",
+        filename="quant-guild-scoring.pdf",
+        # The file behind this URL changes the moment a variation is released.
         headers={"Cache-Control": "no-store"},
     )
 
@@ -520,6 +583,34 @@ def normalise_variations(value: object) -> list[int]:
     return chosen
 
 
+def normalise_grouping_setting(value: object) -> str | list[str]:
+    """One grouping mode, or one per iteration (§9).
+
+    A single string keeps the old behaviour — that mode for every iteration. A
+    list plays the real tournament in one run: `["random", "random", "balanced"]`
+    is qualification, and a list shorter than `iterations` holds its last entry.
+    """
+    if isinstance(value, str):
+        if value not in GROUPINGS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"grouping must be one of {', '.join(GROUPINGS)}.",
+            )
+        return value
+    if isinstance(value, list) and value:
+        bad = [m for m in value if not isinstance(m, str) or m not in GROUPINGS]
+        if bad:
+            raise HTTPException(
+                status_code=400,
+                detail=f"grouping list may only contain {', '.join(GROUPINGS)}.",
+            )
+        return list(value)
+    raise HTTPException(
+        status_code=400,
+        detail="grouping must be a mode, or a non-empty list of modes.",
+    )
+
+
 @app.patch("/api/admin/settings")
 async def admin_update_settings(request: Request, admin: dict = Depends(require_admin)):
     security.require_same_origin(request)
@@ -529,6 +620,9 @@ async def admin_update_settings(request: Request, admin: dict = Depends(require_
 
     if "variations" in changes:
         changes["variations"] = normalise_variations(changes["variations"])
+
+    if "grouping" in changes:
+        changes["grouping"] = normalise_grouping_setting(changes["grouping"])
 
     # The hidden bounds are the one setting that can break every game at once:
     # M_b divides the normalised profit and scales the capital draw, so a zero,
@@ -555,12 +649,31 @@ async def admin_update_settings(request: Request, admin: dict = Depends(require_
 
 @app.post("/api/admin/run-now")
 async def admin_run_now(request: Request, admin: dict = Depends(require_admin)):
+    """Start a showdown now, labelled `practice` (default), `mock` or `final`.
+
+    The label decides three things: whether the board survives the next practice
+    run, whether it appears in the public archive, and — because a balanced or
+    finals iteration seeds on the standing so far — which previous board this run
+    is seeded from. Getting it wrong is not cosmetic, so it is audited.
+    """
     security.require_same_origin(request)
     if scheduler.running:
         raise HTTPException(status_code=409, detail="A showdown is already running.")
-    store.audit(admin["email"], "run-now")
-    scheduler.trigger_now()
-    return {"ok": True, "schedule": scheduler.state()}
+
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001 - an empty body is the ordinary case
+        body = {}
+    requested = str((body or {}).get("kind", store.DEFAULT_KIND))
+    if requested not in store.SHOWDOWN_KINDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"kind must be one of {', '.join(store.SHOWDOWN_KINDS)}.",
+        )
+
+    store.audit(admin["email"], "run-now", f"kind={requested}")
+    scheduler.trigger_now(requested)
+    return {"ok": True, "kind": requested, "schedule": scheduler.state()}
 
 
 @app.get("/api/admin/submissions")
@@ -570,7 +683,10 @@ def admin_submissions(admin: dict = Depends(require_admin)):
 
 @app.get("/api/admin/showdowns")
 def admin_showdowns(admin: dict = Depends(require_admin)):
-    return {"showdowns": store.showdown_history()}
+    return {
+        "showdowns": store.showdown_history(),
+        "kinds": list(store.SHOWDOWN_KINDS),
+    }
 
 
 @app.get("/api/admin/audit")

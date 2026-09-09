@@ -1,5 +1,6 @@
 // The live board. Variation tabs, search, sorting, expandable rows.
 
+import { api } from "../api.js";
 import { store } from "../main.js";
 import { attachCountdown, renderCountdown } from "../countdown.js";
 import { revealAll, revealLines } from "../motion.js";
@@ -16,6 +17,11 @@ import {
 let activeVariation = 0;
 let query = "";
 let sortKey = "rank";
+// `null` is the live board. Anything else is the id of an archived mock or
+// final showdown, whose rows are fetched once and then held — an archived board
+// never changes, so it is deliberately NOT refreshed by the live stream.
+let archivedId = null;
+let archived = { id: null, rows: [], meta: null };
 const expanded = new Set();
 const lastRanks = new Map(); // "V:key" -> rank, for the movement arrows
 
@@ -166,6 +172,43 @@ function emptyBoard(variation, filtered) {
     </div>`;
 }
 
+/** The mock / final board picker, and the banner when one is being viewed. */
+function archiveBar(state, meta) {
+  const boards = state.published_showdowns || [];
+  if (!boards.length) return "";
+
+  return `
+    <div class="mt-6" data-fade>
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="label mr-2">Boards</span>
+        <button data-board="live"
+                class="border-b-2 px-3 py-1.5 font-mono text-[11px] transition-colors ${
+                  meta ? "border-transparent text-ink-3 hover:text-ink" : "border-flame text-ink"
+                }">Live</button>
+        ${boards
+          .map(
+            (row) => `
+          <button data-board="${row.id}"
+                  class="border-b-2 px-3 py-1.5 font-mono text-[11px] transition-colors ${
+                    meta && meta.id === row.id
+                      ? "border-flame text-ink"
+                      : "border-transparent text-ink-3 hover:text-ink"
+                  }">${esc(row.kind === "final" ? "Final" : "Mock")} #${esc(row.id)}</button>`
+          )
+          .join("")}
+      </div>
+      ${
+        meta
+          ? `<p class="mt-4 font-mono text-[10px] leading-relaxed text-flame">
+               Archived ${esc(meta.kind)} board — ${esc(relativeTime(meta.finished_at))},
+               ${esc(meta.games)} games. It is frozen: nothing here updates, and it does not
+               carry into the final standing.
+             </p>`
+          : ""
+      }
+    </div>`;
+}
+
 export async function renderLeaderboard(app) {
   let detach = () => {};
   let firstPaint = true;
@@ -176,10 +219,14 @@ export async function renderLeaderboard(app) {
     if (!variations.includes(activeVariation)) activeVariation = variations[0] || 0;
 
     const schedule = store.schedule;
-    const live = Boolean(schedule.running);
+    const viewingArchive = archivedId !== null && archived.id === archivedId;
+    // While an archived board is up, the live "showdown in progress" chrome is a
+    // lie about what is on screen, so it is switched off.
+    const live = Boolean(schedule.running) && !viewingArchive;
     const myRoll = (store.me.roll || "").toUpperCase();
 
-    const all = (store.rows || []).filter((row) => row.variation === activeVariation);
+    const source = viewingArchive ? archived.rows : store.rows || [];
+    const all = source.filter((row) => row.variation === activeVariation);
     const needle = query.trim().toLowerCase();
     const rows = (needle
       ? all.filter(
@@ -213,6 +260,7 @@ export async function renderLeaderboard(app) {
               state.last_showdown ? relativeTime(state.last_showdown.finished_at) : "never"
             )}${state.last_showdown ? ` · ${esc(state.last_showdown.games)} games played` : ""}
           </p>
+          ${archiveBar(state, viewingArchive ? archived.meta : null)}
         </div>
 
         <div class="panel self-start p-6" data-fade>${renderCountdown({ size: "sm" })}</div>
@@ -316,6 +364,34 @@ export async function renderLeaderboard(app) {
       })
     );
 
+    app.querySelectorAll("[data-board]").forEach((button) =>
+      button.addEventListener("click", async () => {
+        const value = button.dataset.board;
+        if (value === "live") {
+          archivedId = null;
+          paint();
+          return;
+        }
+        const id = Number(value);
+        if (archived.id === id) {
+          archivedId = id;
+          paint();
+          return;
+        }
+        button.disabled = true;
+        try {
+          const response = await api.leaderboard(id);
+          archived = { id, rows: response.rows || [], meta: response.showdown || null };
+          archivedId = id;
+        } catch {
+          // A board that has gone (a wiped database, a bad link) just leaves the
+          // live one up rather than blanking the page.
+          archivedId = null;
+        }
+        paint();
+      })
+    );
+
     app.querySelectorAll("[data-sort]").forEach((button) =>
       button.addEventListener("click", () => {
         sortKey = button.dataset.sort;
@@ -356,6 +432,8 @@ export async function renderLeaderboard(app) {
   let scheduled = null;
   const unsubscribe = store.subscribe(() => {
     clearTimeout(scheduled);
+    // Repainting while an archived board is up is harmless — `paint` reads from
+    // `archived` — but it still refreshes the countdown and the board list.
     scheduled = setTimeout(paint, 300);
   });
 

@@ -69,8 +69,11 @@ CREATE TABLE IF NOT EXISTS showdowns (
     games       INTEGER NOT NULL DEFAULT 0,
     status      TEXT NOT NULL,
     error       TEXT NOT NULL DEFAULT '',
-    settings    TEXT NOT NULL DEFAULT '{}'
+    settings    TEXT NOT NULL DEFAULT '{}',
+    -- What this run was for. See `SHOWDOWN_KINDS`.
+    kind        TEXT NOT NULL DEFAULT 'practice'
 );
+CREATE INDEX IF NOT EXISTS idx_showdowns_kind ON showdowns(kind, status, finished_at);
 
 CREATE TABLE IF NOT EXISTS results (
     showdown_id INTEGER NOT NULL,
@@ -89,6 +92,27 @@ CREATE TABLE IF NOT EXISTS audit (
 );
 """
 
+#: What a showdown was run for. The distinction is not cosmetic:
+#:
+#: ``practice``  the 2-hourly clock. Rewritten constantly, graded never.
+#: ``mock``      an announced mock auction. Its board is a published artefact and
+#:               must survive the next practice run.
+#: ``final``     the run after the deadline. The result.
+#:
+#: A ``balanced`` or ``finals`` iteration seeds on the standing so far, so it
+#: matters enormously which board that comes from. Seeding reads the latest
+#: finished run **of the same kind** — before this column existed it read
+#: whatever had finished last, which on a two-hourly clock is a practice run.
+SHOWDOWN_KINDS = ("practice", "mock", "final")
+DEFAULT_KIND = "practice"
+
+
+def normalise_kind(value: object) -> str:
+    """A run kind, or ``DEFAULT_KIND`` for anything unrecognised."""
+    text = str(value or "").strip().lower()
+    return text if text in SHOWDOWN_KINDS else DEFAULT_KIND
+
+
 # Everything the admin page can change. Kept here so a new deployment and an
 # upgraded one agree on defaults.
 DEFAULT_SETTINGS: dict[str, Any] = {
@@ -104,7 +128,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "group_size": 20,
     # The tournament (§9): how many iterations, and how groups are drawn.
     "iterations": 3,
-    "grouping": "random",          # random | balanced | finals
+    # One mode for every iteration, or one per iteration (§9). A list plays the
+    # whole tournament in one run: ["random", "random", "balanced"] is
+    # qualification, and a list shorter than `iterations` holds its last entry.
+    "grouping": "random",          # random | balanced | finals, or a list of them
     "finals_size": 20,
     # The capital draw at every block boundary (§3.1).
     "kappa_lo": 0.5,
@@ -155,12 +182,32 @@ def connect() -> sqlite3.Connection:
             _conn.execute("PRAGMA journal_mode=WAL")
             _conn.execute("PRAGMA foreign_keys=ON")
             _conn.executescript(SCHEMA)
+            _migrate(_conn)
             _conn.commit()
             try:
                 Path(config.DB_PATH).chmod(0o600)
             except OSError:
                 pass
         return _conn
+
+
+#: Columns added after the first deployment. ``CREATE TABLE IF NOT EXISTS`` is a
+#: no-op on a database that already has the table, so a new column never reaches
+#: the VM without this — and the VM's database is the one holding every real
+#: submission, so it is never dropped and recreated.
+MIGRATIONS: tuple[tuple[str, str, str], ...] = (
+    ("showdowns", "kind", "TEXT NOT NULL DEFAULT 'practice'"),
+)
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Add any column in ``MIGRATIONS`` the database does not already have."""
+    for table, column, decl in MIGRATIONS:
+        existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        if not existing:
+            continue                       # table not created yet; SCHEMA owns it
+        if column not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
 
 
 def _exec(sql: str, params: tuple = ()) -> sqlite3.Cursor:
@@ -323,11 +370,12 @@ def submission_counts() -> dict:
 # --- showdowns and results -----------------------------------------------------
 
 
-def start_showdown(settings: dict) -> int:
+def start_showdown(settings: dict, kind: str = DEFAULT_KIND) -> int:
     cur = _exec(
-        "INSERT INTO showdowns(started_at, status, settings) VALUES(?,?,?)",
+        "INSERT INTO showdowns(started_at, status, settings, kind) VALUES(?,?,?,?)",
         (time.time(), "running", json.dumps({k: v for k, v in settings.items()
-                                             if k not in SECRET_SETTING_KEYS})),
+                                             if k not in SECRET_SETTING_KEYS}),
+         normalise_kind(kind)),
     )
     return int(cur.lastrowid)
 
@@ -348,22 +396,62 @@ def finish_showdown(showdown_id: int, *, games: int, rows: list[dict], error: st
         conn.commit()
 
 
-def latest_showdown(status: str = "done") -> dict | None:
-    rows = _query(
-        "SELECT * FROM showdowns WHERE status = ? ORDER BY finished_at DESC LIMIT 1", (status,)
-    )
+def latest_showdown(status: str = "done", kind: str | None = None) -> dict | None:
+    """The most recent finished run, optionally restricted to one kind.
+
+    ``kind=None`` means "whatever ran last", which is what the live board wants:
+    a practice run is still the freshest picture of the field. Seeding wants the
+    opposite and always passes a kind.
+    """
+    if kind is None:
+        rows = _query(
+            "SELECT * FROM showdowns WHERE status = ? ORDER BY finished_at DESC LIMIT 1",
+            (status,),
+        )
+    else:
+        rows = _query(
+            "SELECT * FROM showdowns WHERE status = ? AND kind = ? "
+            "ORDER BY finished_at DESC LIMIT 1",
+            (status, normalise_kind(kind)),
+        )
     return dict(rows[0]) if rows else None
 
 
-def showdown_history(limit: int = 20) -> list[dict]:
-    rows = _query("SELECT * FROM showdowns ORDER BY started_at DESC LIMIT ?", (limit,))
+def showdown_history(limit: int = 20, kind: str | None = None) -> list[dict]:
+    if kind is None:
+        rows = _query("SELECT * FROM showdowns ORDER BY started_at DESC LIMIT ?", (limit,))
+    else:
+        rows = _query(
+            "SELECT * FROM showdowns WHERE kind = ? ORDER BY started_at DESC LIMIT ?",
+            (normalise_kind(kind), limit),
+        )
     return [dict(r) for r in rows]
 
 
-def leaderboard(showdown_id: int | None = None) -> list[dict]:
-    """Ranked rows from a showdown, joined to the display name of each roll."""
+def published_showdowns(limit: int = 30) -> list[dict]:
+    """Finished mock and final runs, newest first — the archive the site offers.
+
+    Practice runs are excluded on purpose. There have been hundreds of them, they
+    are rewritten every two hours, and none of them means anything; an archive
+    that lists them buries the two boards that do.
+    """
+    rows = _query(
+        "SELECT id, started_at, finished_at, games, kind FROM showdowns "
+        "WHERE status = 'done' AND kind IN ('mock', 'final') "
+        "ORDER BY finished_at DESC LIMIT ?",
+        (limit,),
+    )
+    return [dict(r) for r in rows]
+
+
+def leaderboard(showdown_id: int | None = None, kind: str | None = None) -> list[dict]:
+    """Ranked rows from a showdown, joined to the display name of each roll.
+
+    With no ``showdown_id`` this is the latest finished run — of ``kind``, if one
+    is given. Naming an id wins over naming a kind.
+    """
     if showdown_id is None:
-        latest = latest_showdown()
+        latest = latest_showdown(kind=kind)
         if latest is None:
             return []
         showdown_id = int(latest["id"])

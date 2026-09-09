@@ -8,14 +8,25 @@ the deployed web root (`deploy/nginx.conf` serves an allowlist — see
 |---|---|
 | `simulate.py` | one sandboxed group game; grouping and filler bots |
 | `validate.py` | accept or reject a single submission |
-| `evaluate.py` | a whole showdown: groups × repeats × capitals, aggregated and ranked |
+| `evaluate.py` | a whole showdown: iterations × groups, aggregated and ranked |
 
 ## How it fits together
 
 `server/scheduler.py` calls `evaluate.run_showdown` every `interval_minutes`.
-That builds one job per (variation, repeat, group, starting capital), runs them
-across a process pool, and aggregates every game a bot played into one ranked
-row per variation.
+It plays the run's iterations **in order** — one job per (variation, group)
+within each — fanning the groups of one iteration across a process pool, then
+aggregates every game a bot played into one ranked row per variation.
+
+Iterations are sequential rather than all-at-once because `grouping` is set per
+iteration (§9: `["random", "random", "balanced", "finals", "finals"]`), and a
+`balanced` or `finals` iteration snake-seeds or cuts on the standing *after* the
+iterations before it. `build_jobs` still returns the whole plan up front, which
+is what sizing and tests want, but it is not what runs.
+
+A run also carries a **kind** — `practice`, `mock` or `final` — recorded on the
+`showdowns` row. It decides whether the board is archived and published, and
+which previous board a balanced or finals run is seeded from
+(`Scheduler.current_seeding` reads the last finished run of the same kind).
 
 `validate.validate` runs on upload instead: filename and roll check, then the
 static policy (`sandbox/policy.py`), then a 120-round game against the sample
@@ -31,7 +42,7 @@ from harness.evaluate import ShowdownSettings, run_showdown
 from harness.simulate import BotSpec
 
 field = {1: [BotSpec(key="ME24B152", path="/var/lib/quantguild/submissions/ME24B152_1.py")]}
-result = run_showdown(field, ShowdownSettings(repeats=1, num_rounds=500))
+result = run_showdown(field, ShowdownSettings(iterations=1, num_rounds=500))
 
 for row in sorted(result.rows, key=lambda r: r.rank):
     print(row.rank, row.key, round(row.mean_net_profit, 2))

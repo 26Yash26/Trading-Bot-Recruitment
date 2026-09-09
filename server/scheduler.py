@@ -15,11 +15,26 @@ from __future__ import annotations
 import asyncio
 import time
 
-from harness.evaluate import ShowdownSettings, run_showdown
+from harness.evaluate import GROUPINGS, ShowdownSettings, run_showdown
 from harness.simulate import BotSpec
 from src.auction.capital import CapitalDraw
 
 from . import events, store
+
+
+def normalise_grouping(value: object) -> str | tuple[str, ...]:
+    """A grouping setting from the database, as `ShowdownSettings` wants it.
+
+    Accepts the old single string and the per-iteration list §9 needs, and drops
+    anything unrecognised rather than letting a typo in the console raise inside
+    the showdown thread — where it would abort the run and leave the board empty.
+    """
+    if isinstance(value, str):
+        return value if value in GROUPINGS else "random"
+    if isinstance(value, (list, tuple)):
+        modes = tuple(str(m) for m in value if str(m) in GROUPINGS)
+        return modes or "random"
+    return "random"
 
 
 class Scheduler:
@@ -32,6 +47,11 @@ class Scheduler:
         self._wake = asyncio.Event()
         self._loop: asyncio.AbstractEventLoop | None = None
         self._stop = False
+        # What the next run is for. The clock always produces practice runs; an
+        # admin pressing "Run mock auction" sets this for one run and it falls
+        # back afterwards, so a forgotten switch cannot mislabel the 2am tick.
+        self._pending_kind = store.DEFAULT_KIND
+        self.kind = store.DEFAULT_KIND
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -61,8 +81,9 @@ class Scheduler:
         store.update_settings({"next_run_at": next_at})
         return next_at
 
-    def trigger_now(self) -> None:
-        """Admin pressed Run now."""
+    def trigger_now(self, kind: str = store.DEFAULT_KIND) -> None:
+        """Admin pressed Run now. ``kind`` labels this one run, not the clock."""
+        self._pending_kind = store.normalise_kind(kind)
         store.update_settings({"next_run_at": time.time()})
         if self._loop:
             self._loop.call_soon_threadsafe(self._wake.set)
@@ -82,6 +103,8 @@ class Scheduler:
         done, total = self.progress
         return {
             "running": self.running,
+            "kind": self.kind,
+            "pending_kind": self._pending_kind,
             "enabled": bool(settings.get("showdown_enabled", True)),
             "interval_minutes": int(settings.get("interval_minutes", 120)),
             "next_run_at": float(settings.get("next_run_at") or 0.0),
@@ -142,10 +165,21 @@ class Scheduler:
         return field
 
     @staticmethod
-    def current_seeding() -> dict[int, dict[str, float]]:
-        """Per variation: what each bot has scored so far, for snake seeding."""
+    def current_seeding(kind: str) -> dict[int, dict[str, float]]:
+        """Per variation: what each bot scored in the last run **of this kind**.
+
+        The kind filter is the whole point. A balanced or finals iteration is
+        seeded on cumulative points, and with a practice showdown landing every
+        two hours the last finished board is almost always a practice one — so a
+        mock auction's snake seeding used to be built from a throwaway run
+        against throwaway bounds, silently. A mock seeds on the previous mock;
+        the final seeds on the previous final; practice seeds on practice.
+
+        Within one run, iterations seed on each other — see
+        `harness.evaluate.run_showdown`. This is only the starting standing.
+        """
         seeding: dict[int, dict[str, float]] = {}
-        for row in store.leaderboard():
+        for row in store.leaderboard(kind=kind):
             seeding.setdefault(int(row["variation"]), {})[row["key"]] = float(
                 row.get("score", 0.0)
             )
@@ -167,7 +201,7 @@ class Scheduler:
             block_size=int(settings.get("block_size", 500)),
             group_size=int(settings.get("group_size", 20)),
             iterations=int(settings.get("iterations", 3)),
-            grouping=str(settings.get("grouping", "random")),
+            grouping=normalise_grouping(settings.get("grouping", "random")),
             finals_size=int(settings.get("finals_size", 20)),
             capital=CapitalDraw.from_settings(settings),
             block_bounds=tuple(tuple(b) for b in settings.get("block_bounds")),
@@ -177,22 +211,27 @@ class Scheduler:
             mem_mb=int(settings.get("mem_mb", 512)),
         )
 
+        kind = self._pending_kind
+        self._pending_kind = store.DEFAULT_KIND
+
         self.running = True
+        self.kind = kind
         self.last_error = ""
         self.progress = (0, 0)
-        showdown_id = store.start_showdown(settings)
+        showdown_id = store.start_showdown(settings, kind=kind)
         self.current_id = showdown_id
         loop = asyncio.get_running_loop()
-        events.publish("showdown", {"status": "started", "id": showdown_id})
+        events.publish("showdown", {"status": "started", "id": showdown_id, "kind": kind})
 
         def on_progress(done: int, total: int) -> None:
             self.progress = (done, total)
             events.publish_threadsafe(loop, "progress", {"done": done, "total": total})
 
         try:
-            # Iteration 3 balances groups by cumulative points, and the finals
-            # cut the field on them, so both need the standing board (§9).
-            seeding = self.current_seeding() if show_settings.grouping != "random" else None
+            # A balanced or finals iteration needs a standing to seed on (§9).
+            # If every iteration in this run is random there is nothing to seed.
+            modes = set(show_settings.grouping_schedule())
+            seeding = None if modes == {"random"} else self.current_seeding(kind)
             result = await loop.run_in_executor(
                 None,
                 lambda: run_showdown(
@@ -207,7 +246,10 @@ class Scheduler:
             )
             store.update_settings({"last_run_at": time.time()})
             self.last_error = "; ".join(result.errors)[:300]
-            store.audit("scheduler", "showdown", f"id={showdown_id} games={result.games_played}")
+            store.audit(
+                "scheduler", "showdown",
+                f"id={showdown_id} kind={kind} games={result.games_played}",
+            )
             events.publish("leaderboard", store.leaderboard())
             return {"status": "done", "id": showdown_id, "games": result.games_played}
         except Exception as exc:  # noqa: BLE001
@@ -216,9 +258,12 @@ class Scheduler:
             raise
         finally:
             self.running = False
+            self.kind = store.DEFAULT_KIND
             self.current_id = None
             self.progress = (0, 0)
-            events.publish("showdown", {"status": "finished", "id": showdown_id})
+            events.publish(
+                "showdown", {"status": "finished", "id": showdown_id, "kind": kind}
+            )
 
 
 scheduler = Scheduler()

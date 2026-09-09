@@ -16,7 +16,7 @@ submissions into a leaderboard, and a **server** that puts it on the web.
                                  └── server/events.py     SSE fan-out
                                             │
                                             ▼
-                                 harness/evaluate.py      groups × repeats × capitals
+                                 harness/evaluate.py      iterations × groups
                                             │             (ProcessPoolExecutor)
                                             ▼
                                  harness/simulate.py      one group, one game
@@ -78,11 +78,19 @@ sandboxed game against the sample bots → accept (file written to
 `QG_DATA_DIR/submissions`, previous file for that variation deactivated) or
 reject with a reason.
 
-**One showdown** (`scheduler.run_once`): collect the latest accepted file per
-`(roll, variation)`, minus banned rolls → for each variation, repeat, group and
-starting capital, build a job → run the jobs across a process pool → aggregate
-per `(roll, variation)` into mean/std/best/worst net profit, wins, survival →
-rank → write to `results` → publish over SSE.
+**One showdown** (`scheduler.run_once`): stamp the run `practice`, `mock` or
+`final` → collect the latest accepted file per `(roll, variation)`, minus banned
+rolls → for each iteration **in order**, build one job per (variation, group)
+using that iteration's grouping and the standing so far → run those jobs across a
+process pool → aggregate per `(roll, variation)` into score, mean/worst/spread of
+π, survival and raw profit → rank → write to `results` → publish over SSE.
+
+The kind is not a label. `mock` and `final` boards are archived and stay
+reachable (`GET /api/leaderboard?showdown=<id>`) after the two-hourly practice
+clock has replaced the live one, and a balanced or finals run seeds only on the
+last finished run **of its own kind** — otherwise its snake seeding is built from
+whichever practice run happened to land most recently. `docs/scoring.tex` §7-8
+is the normative description.
 
 ## The frontend has no build step
 

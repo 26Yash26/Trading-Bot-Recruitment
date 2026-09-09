@@ -43,7 +43,9 @@ const json = (method) => (path, payload) =>
 export const api = {
   me: () => request("/me"),
   state: () => request("/state"),
-  leaderboard: () => request("/leaderboard"),
+  leaderboard: (showdown) =>
+    request(showdown ? `/leaderboard?showdown=${encodeURIComponent(showdown)}` : "/leaderboard"),
+  showdowns: () => request("/showdowns"),
   logout: () => request("/auth/logout", { method: "POST" }),
 
   submit(file) {
@@ -55,7 +57,10 @@ export const api = {
   admin: {
     settings: () => request("/admin/settings"),
     update: json("PATCH").bind(null, "/admin/settings"),
-    runNow: () => request("/admin/run-now", { method: "POST" }),
+    // `kind` labels the run: practice (the clock), mock, or final. It decides
+    // whether the board survives the next practice run and which previous board
+    // a balanced or finals iteration seeds on — see server/scheduler.py.
+    runNow: (kind = "practice") => json("POST")("/admin/run-now", { kind }),
     submissions: () => request("/admin/submissions"),
     showdowns: () => request("/admin/showdowns"),
     audit: () => request("/admin/audit"),

@@ -24,10 +24,31 @@ import {
 const INTERVAL_PRESETS = [15, 30, 60, 120, 240, 480];
 
 const GROUPINGS = [
-  ["random", "Random", "Iterations 1 and 2 — the field is reshuffled on a fresh seed."],
-  ["balanced", "Strength-balanced", "Iteration 3 — sorted by points and dealt in a snake, so groups are equal in average strength."],
-  ["finals", "Finals", "Iterations 4 and 5 — only the leading bots, head to head."],
+  ["random", "Random", "The field is reshuffled on a fresh seed."],
+  ["balanced", "Balanced", "Sorted by points so far and dealt in a snake — groups equal in average strength."],
+  ["finals", "Finals", "Only the leading bots, head to head."],
 ];
+
+// What a showdown is for. Not cosmetic: a mock or final board is archived and
+// stays reachable, while practice boards are rewritten every interval, and a
+// balanced or finals iteration seeds on the last board OF THE SAME KIND.
+const RUN_KINDS = [
+  ["practice", "Practice", "The ordinary board. Rewritten by the next tick."],
+  ["mock", "Mock auction", "Published and archived. Seeds on the previous mock."],
+  ["final", "Final evaluation", "The result. Seeds on the previous final run."],
+];
+
+/** `settings.grouping` as one mode per iteration, whatever shape it is stored in. */
+function groupingSchedule(settings) {
+  const count = Math.max(1, Number(settings.iterations) || 1);
+  const stored = Array.isArray(settings.grouping)
+    ? settings.grouping
+    : [settings.grouping || "random"];
+  // A schedule shorter than `iterations` holds its last entry — same rule as
+  // `ShowdownSettings.grouping_for_iteration`, so the console cannot show a
+  // tournament different from the one that will actually be played.
+  return Array.from({ length: count }, (_, i) => stored[Math.min(i, stored.length - 1)]);
+}
 
 const TABS = [
   ["showdown", "Showdown"],
@@ -223,9 +244,40 @@ function showdownTab(settings, schedule, counts) {
                    </p>`
                 : ""
             }
-            <button class="btn-solid mt-6 w-full" data-run-now ${schedule.running ? "disabled" : ""}>
-              ${schedule.running ? "Showdown in progress…" : "Run a showdown now"}
-            </button>
+            <div class="mt-6">
+              <span class="label">Run a showdown now, as</span>
+              <div class="mt-3 space-y-2">
+                ${RUN_KINDS.map(
+                  ([value, title, note]) => `
+                  <button type="button" data-run-now="${value}" ${schedule.running ? "disabled" : ""}
+                          class="panel-2 block w-full px-5 py-4 text-left transition-colors
+                                 ${
+                                   schedule.running
+                                     ? "opacity-40"
+                                     : value === "practice"
+                                       ? "hover:border-line-2"
+                                       : "hover:border-flame"
+                                 }">
+                    <span class="flex items-center justify-between">
+                      <span class="text-sm font-semibold">${title}</span>
+                      ${
+                        value === "practice"
+                          ? ""
+                          : `<span class="font-mono text-[9px] uppercase tracking-[0.16em] text-flame">archived</span>`
+                      }
+                    </span>
+                    <span class="mt-2 block font-mono text-[10px] leading-relaxed text-ink-3">${note}</span>
+                  </button>`
+                ).join("")}
+              </div>
+              ${
+                schedule.running
+                  ? `<p class="mt-3 font-mono text-[10px] text-flame">
+                       a ${esc(schedule.kind || "practice")} showdown is in progress…
+                     </p>`
+                  : ""
+              }
+            </div>
           </div>
         </div>
       </div>
@@ -262,20 +314,42 @@ function gameTab(settings, counts) {
           </div>
 
           <div class="mt-6">
-            <span class="label">Grouping</span>
-            <div class="mt-3 space-y-2">
-              ${GROUPINGS.map(
-                ([value, title, note]) => `
-                <button type="button" data-grouping="${value}"
-                        class="panel-2 block w-full px-5 py-4 text-left transition-colors
-                               ${settings.grouping === value ? "border-flame" : "hover:border-line-2"}">
-                  <span class="flex items-center gap-3">
-                    <span class="h-2 w-2 ${settings.grouping === value ? "bg-flame" : "bg-line-2"}"></span>
-                    <span class="text-sm font-semibold">${title}</span>
-                  </span>
-                  <span class="mt-2 block font-mono text-[10px] leading-relaxed text-ink-3">${note}</span>
-                </button>`
-              ).join("")}
+            <span class="label">Grouping, iteration by iteration</span>
+            <p class="mt-2 font-mono text-[10px] leading-relaxed text-ink-3">
+              §9 is random, random, balanced, then two finals. One run now plays the
+              whole thing: each iteration seeds on the standing after the ones before it.
+            </p>
+            <div class="mt-4 space-y-2">
+              ${groupingSchedule(settings)
+                .map(
+                  (mode, index) => `
+                <div class="panel-2 flex items-center gap-3 px-4 py-3">
+                  <span class="w-16 shrink-0 font-mono text-[10px] text-ink-3">iter ${index + 1}</span>
+                  <div class="flex flex-1 gap-2">
+                    ${GROUPINGS.map(
+                      ([value, title]) => `
+                      <button type="button" data-grouping-at="${index}" data-grouping-mode="${value}"
+                              title="${esc(
+                                GROUPINGS.find(([v]) => v === value)[2]
+                              )}"
+                              class="flex-1 border px-3 py-2 font-mono text-[10px] transition-colors
+                                     ${
+                                       mode === value
+                                         ? "border-flame text-flame"
+                                         : "border-line-2 text-ink-3 hover:text-ink-2"
+                                     }">${title}</button>`
+                    ).join("")}
+                  </div>
+                </div>`
+                )
+                .join("")}
+            </div>
+            <div class="mt-3 flex flex-wrap gap-2">
+              <span class="font-mono text-[10px] text-ink-3">presets:</span>
+              <button type="button" data-grouping-preset="random"
+                      class="font-mono text-[10px] text-flame hover:underline">all random</button>
+              <button type="button" data-grouping-preset="ps9"
+                      class="font-mono text-[10px] text-flame hover:underline">§9 in full</button>
             </div>
           </div>
         </div>
@@ -521,6 +595,9 @@ function historyTab(showdowns, audit) {
                 }">#${row.id} ${esc(row.status)}</span>
                 <span class="text-ink-3">${esc(relativeTime(row.started_at))}</span>
               </div>
+              <p class="mt-2 font-mono text-[10px] ${
+                row.kind && row.kind !== "practice" ? "text-flame" : "text-ink-3"
+              }">${esc(row.kind || "practice")}</p>
               <p class="mt-2 font-mono text-[10px] text-ink-2">
                 ${row.games} games${
                   row.finished_at ? ` · ${Math.round(row.finished_at - row.started_at)}s` : ""
@@ -773,8 +850,12 @@ export async function renderAdmin(app) {
       )
     );
 
-    app.querySelectorAll("[data-grouping]").forEach((button) =>
-      button.addEventListener("click", () => save({ grouping: button.dataset.grouping }))
+    app.querySelectorAll("[data-grouping-at]").forEach((button) =>
+      button.addEventListener("click", () => {
+        const schedule = groupingSchedule(data.settings);
+        schedule[Number(button.dataset.groupingAt)] = button.dataset.groupingMode;
+        save({ grouping: schedule });
+      })
     );
 
     app.querySelectorAll("[data-variation-toggle]").forEach((button) =>
@@ -820,20 +901,42 @@ export async function renderAdmin(app) {
       save({ deadline_iso: iso });
     });
 
-    app.querySelector("[data-run-now]")?.addEventListener("click", async (event) => {
-      event.target.disabled = true;
-      try {
-        await api.admin.runNow();
-        toast("Showdown starting…", "ok");
-        setTimeout(async () => {
-          await load();
-          paint();
-        }, 1500);
-      } catch (error) {
-        toast(error.message, "error");
-        event.target.disabled = false;
-      }
-    });
+    app.querySelectorAll("[data-grouping-preset]").forEach((button) =>
+      button.addEventListener("click", () => {
+        const count = Math.max(1, Number(data.settings.iterations) || 1);
+        // §9: two random iterations, one balanced, then finals for the rest.
+        const ps9 = Array.from({ length: count }, (_, i) =>
+          i < 2 ? "random" : i === 2 ? "balanced" : "finals"
+        );
+        save({
+          grouping: button.dataset.groupingPreset === "ps9" ? ps9 : "random",
+        });
+      })
+    );
+
+    app.querySelectorAll("[data-run-now]").forEach((button) =>
+      button.addEventListener("click", async () => {
+        const kind = button.dataset.runNow;
+        const label = RUN_KINDS.find(([value]) => value === kind)?.[1] || kind;
+        // A mock or final board is a published artefact and it seeds the next
+        // one. Mislabelling it is not undoable from this page, so ask first.
+        if (kind !== "practice" && !confirm(`Run a ${label.toLowerCase()}? Its board is archived and published.`)) {
+          return;
+        }
+        app.querySelectorAll("[data-run-now]").forEach((b) => (b.disabled = true));
+        try {
+          await api.admin.runNow(kind);
+          toast(`${label} starting…`, "ok");
+          setTimeout(async () => {
+            await load();
+            paint();
+          }, 1500);
+        } catch (error) {
+          toast(error.message, "error");
+          app.querySelectorAll("[data-run-now]").forEach((b) => (b.disabled = false));
+        }
+      })
+    );
 
     app.querySelectorAll("[data-ban]").forEach((button) =>
       button.addEventListener("click", async () => {

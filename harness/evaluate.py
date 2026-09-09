@@ -27,15 +27,26 @@ from src.auction.distributions import normalise_block_bounds
 
 from .simulate import BotOutcome, BotSpec, make_groups, play_group
 
+#: The grouping modes §9 defines. ``random`` draws groups blind; ``balanced``
+#: snake-seeds them on cumulative points; ``finals`` cuts the field to the
+#: leading ``finals_size`` and plays those head to head.
+GROUPINGS = ("random", "balanced", "finals")
+
 
 @dataclass
 class ShowdownSettings:
     """Everything the admin page can turn. Defaults follow the problem statement.
 
-    ``grouping`` picks which part of §9 this run reproduces:
+    ``grouping`` picks which part of §9 each iteration reproduces:
     ``"random"`` is iterations 1 and 2, ``"balanced"`` is the snake-seeded
     iteration 3, and ``"finals"`` restricts the field to the leading
     ``finals_size`` bots and plays them head to head.
+
+    It may be a single mode applied to every iteration, or **one mode per
+    iteration** — ``("random", "random", "balanced", "finals", "finals")`` plays
+    the whole of §9 in one run, with each iteration seeded on the ones before it
+    rather than on whatever board happened to be published last. See
+    ``grouping_for_iteration``.
     """
 
     variations: tuple[int, ...] = (1, 2)
@@ -43,7 +54,7 @@ class ShowdownSettings:
     block_size: int = 500
     group_size: int = 20
     iterations: int = 3
-    grouping: str = "random"
+    grouping: str | tuple[str, ...] = "random"
     finals_size: int = 20
     capital: CapitalDraw = field(default_factory=CapitalDraw)
     block_bounds: tuple = (
@@ -62,6 +73,33 @@ class ShowdownSettings:
     @property
     def num_blocks(self) -> int:
         return max(1, math.ceil(self.num_rounds / max(1, self.block_size)))
+
+    def grouping_schedule(self) -> tuple[str, ...]:
+        """``grouping`` as a tuple of modes, validated."""
+        value = self.grouping
+        schedule = (value,) if isinstance(value, str) else tuple(str(m) for m in value)
+        if not schedule:
+            raise ValueError("grouping must name at least one mode")
+        unknown = [m for m in schedule if m not in GROUPINGS]
+        if unknown:
+            raise ValueError(
+                f"unknown grouping {unknown[0]!r}; expected one of {', '.join(GROUPINGS)}"
+            )
+        return schedule
+
+    def grouping_for_iteration(self, iteration: int) -> str:
+        """The mode iteration ``iteration`` (0-based) plays.
+
+        A schedule shorter than ``iterations`` **holds its last entry** rather
+        than cycling, which is what the block schedule does. Cycling is right
+        for value bounds — every schedule there is an equally valid fresh draw —
+        and wrong here: ``("random", "balanced")`` over five iterations should
+        mean one random iteration and then four balanced ones, not an
+        alternation that keeps throwing the field back into a random draw after
+        it has been seeded.
+        """
+        schedule = self.grouping_schedule()
+        return schedule[min(int(iteration), len(schedule) - 1)]
 
     def bounds_for_iteration(self, iteration: int) -> list[tuple[float, float]]:
         """The block schedule iteration ``iteration`` (0-based) plays.
@@ -146,49 +184,99 @@ def _play_one(job: dict) -> list[dict]:
     return [asdict(o) for o in result.outcomes if not o.is_filler]
 
 
-def build_jobs(
+def build_iteration_jobs(
     submissions: dict[int, list[BotSpec]],
     settings: ShowdownSettings,
+    iteration: int,
     *,
     seeding: dict[int, dict[str, float]] | None = None,
 ) -> list[dict]:
-    """One job per (variation, iteration, group).
+    """One job per (variation, group) for a single iteration.
 
-    ``seeding`` maps a variation to each bot's cumulative score so far. It is
-    what iteration 3 balances groups with, and what the finals cut the field on.
+    ``seeding`` maps a variation to each bot's cumulative score *going into this
+    iteration*. It is what a ``balanced`` iteration snake-seeds groups with, and
+    what a ``finals`` iteration cuts the field on. A ``random`` iteration ignores
+    it entirely.
     """
+    grouping = settings.grouping_for_iteration(iteration)
     jobs: list[dict] = []
+
     for variation in settings.variations:
         specs = submissions.get(variation) or []
         if not specs:
             continue
 
         points = (seeding or {}).get(variation) or {}
-        if settings.grouping == "finals" and points:
+        if grouping == "finals" and points:
             specs = sorted(specs, key=lambda s: -points.get(s.key, 0.0))[: settings.finals_size]
-        group_seeding = points if settings.grouping in ("balanced", "finals") else None
+        group_seeding = points if grouping in ("balanced", "finals") else None
 
-        for iteration in range(settings.iterations):
-            rng = random.Random(settings.seed + variation * 1000 + iteration)
-            groups = make_groups(specs, settings.group_size, rng, seeding=group_seeding)
-            for group_idx, group in enumerate(groups):
-                if not group:
-                    continue
-                jobs.append(
-                    {
-                        "specs": [(s.key, str(s.path)) for s in group],
-                        "variation": variation,
-                        "block_bounds": settings.bounds_for_iteration(iteration),
-                        "seed": settings.seed + iteration * 97 + group_idx * 13 + variation,
-                        "num_rounds": settings.num_rounds,
-                        "block_size": settings.block_size,
-                        "group_size": settings.group_size,
-                        "capital": settings.capital.as_dict(),
-                        "round_timeout": settings.round_timeout,
-                        "mem_mb": settings.mem_mb,
-                    }
-                )
+        rng = random.Random(settings.seed + variation * 1000 + iteration)
+        groups = make_groups(specs, settings.group_size, rng, seeding=group_seeding)
+        for group_idx, group in enumerate(groups):
+            if not group:
+                continue
+            jobs.append(
+                {
+                    "specs": [(s.key, str(s.path)) for s in group],
+                    "variation": variation,
+                    "iteration": iteration,
+                    "grouping": grouping,
+                    "block_bounds": settings.bounds_for_iteration(iteration),
+                    "seed": settings.seed + iteration * 97 + group_idx * 13 + variation,
+                    "num_rounds": settings.num_rounds,
+                    "block_size": settings.block_size,
+                    "group_size": settings.group_size,
+                    "capital": settings.capital.as_dict(),
+                    "round_timeout": settings.round_timeout,
+                    "mem_mb": settings.mem_mb,
+                }
+            )
     return jobs
+
+
+def build_jobs(
+    submissions: dict[int, list[BotSpec]],
+    settings: ShowdownSettings,
+    *,
+    seeding: dict[int, dict[str, float]] | None = None,
+) -> list[dict]:
+    """Every job in the run, in iteration order.
+
+    Every iteration sees the same ``seeding`` here, so this is the *plan* rather
+    than what actually runs: ``run_showdown`` rebuilds each iteration's jobs from
+    the standing after the previous one. Kept because sizing, previewing and
+    testing all want the whole list without playing a single game.
+    """
+    return [
+        job
+        for iteration in range(settings.iterations)
+        for job in build_iteration_jobs(submissions, settings, iteration, seeding=seeding)
+    ]
+
+
+def seeding_from(outcomes: list[BotOutcome]) -> dict[int, dict[str, float]]:
+    """Cumulative score per bot per variation, for the next iteration to seed on.
+
+    This is the same quantity ``aggregate`` reports as ``score`` — the sum of the
+    iteration scores so far — just computed without the rest of the row.
+    """
+    seeding: dict[int, dict[str, float]] = {}
+    for outcome in outcomes:
+        board = seeding.setdefault(outcome.variation, {})
+        board[outcome.key] = board.get(outcome.key, 0.0) + outcome.iteration_score
+    return seeding
+
+
+def merge_seeding(*boards: dict[int, dict[str, float]] | None) -> dict[int, dict[str, float]]:
+    """Add cumulative-score boards together, later ones on top of earlier ones."""
+    merged: dict[int, dict[str, float]] = {}
+    for board in boards:
+        for variation, points in (board or {}).items():
+            target = merged.setdefault(variation, {})
+            for key, value in points.items():
+                target[key] = target.get(key, 0.0) + float(value)
+    return merged
 
 
 def aggregate(outcomes: list[BotOutcome]) -> list[LeaderboardRow]:
@@ -254,30 +342,46 @@ def run_showdown(
 
     ``progress(done, total)`` is called after each finished game, so the admin
     page can show a live bar.
+
+    Iterations run **in order**, not all at once, because a ``balanced`` or
+    ``finals`` iteration has to seed on the standing *after* the iterations
+    before it. Groups inside one iteration are independent games and still fan
+    out across the process pool, which is where all the parallelism was anyway:
+    a 100-bot field is five groups per variation per iteration.
+
+    ``seeding`` is the standing the run *starts* from — normally the previous
+    published board of the same kind, or nothing at all.
     """
     started = time.time()
-    jobs = build_jobs(submissions, settings, seeding=seeding)
     outcomes: list[BotOutcome] = []
     errors: list[str] = []
 
-    if not jobs:
+    if not build_jobs(submissions, settings, seeding=seeding):
         return ShowdownResult(started, time.time(), 0, [], [])
 
-    workers = max(1, min(settings.workers, len(jobs)))
+    workers = max(1, settings.workers)
     done = 0
+    played = 0
+    total = 0
 
-    if workers == 1:
-        for job in jobs:
-            try:
-                outcomes.extend(BotOutcome(**d) for d in _play_one(job))
-            except Exception as exc:  # noqa: BLE001 - one bad group must not stop the rest
-                errors.append(f"variation {job['variation']}: {exc}"[:300])
-            done += 1
-            if progress:
-                progress(done, len(jobs))
-    else:
-        with ProcessPoolExecutor(max_workers=workers) as pool:
-            futures = {pool.submit(_play_one, job): job for job in jobs}
+    def run(job_list: list[dict]) -> None:
+        nonlocal done, played
+        if not job_list:
+            return
+        played += len(job_list)
+        if workers == 1 or len(job_list) == 1:
+            for job in job_list:
+                try:
+                    outcomes.extend(BotOutcome(**d) for d in _play_one(job))
+                except Exception as exc:  # noqa: BLE001 - one bad group must not stop the rest
+                    errors.append(f"variation {job['variation']}: {exc}"[:300])
+                done += 1
+                if progress:
+                    progress(done, total)
+            return
+
+        with ProcessPoolExecutor(max_workers=min(workers, len(job_list))) as pool:
+            futures = {pool.submit(_play_one, job): job for job in job_list}
             for future in as_completed(futures):
                 job = futures[future]
                 try:
@@ -286,10 +390,24 @@ def run_showdown(
                     errors.append(f"variation {job['variation']}: {exc}"[:300])
                 done += 1
                 if progress:
-                    progress(done, len(jobs))
+                    progress(done, total)
+
+    for iteration in range(settings.iterations):
+        standing = merge_seeding(seeding, seeding_from(outcomes))
+        jobs = build_iteration_jobs(submissions, settings, iteration, seeding=standing)
+
+        # Re-estimate what is left every iteration. A `finals` iteration cuts the
+        # field to `finals_size`, so it plays far fewer groups than a plan drawn
+        # before anything had a score — and a progress bar that ends at 5/6 looks
+        # like a run that stopped early.
+        total = done + len(jobs) + sum(
+            len(build_iteration_jobs(submissions, settings, later, seeding=standing))
+            for later in range(iteration + 1, settings.iterations)
+        )
+        run(jobs)
 
     rows = aggregate(outcomes)
-    return ShowdownResult(started, time.time(), len(jobs), rows, errors)
+    return ShowdownResult(started, time.time(), played, rows, errors)
 
 
 def estimate_seconds(n_bots: int, settings: ShowdownSettings, per_game: float = 15.0) -> float:
