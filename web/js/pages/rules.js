@@ -392,6 +392,15 @@ export async function renderRules(app) {
               profit π (is the strategy profitable in absolute terms?), survival rate, worst-block π
               and the spread of π across blocks.
             </p>
+            <p class="mt-6" data-fade>
+              <a href="/api/docs/scoring.pdf" class="btn-line" target="_blank" rel="noopener">
+                The full scoring specification <span>↓</span>
+              </a>
+            </p>
+            <p class="mt-4 max-w-2xl font-mono text-[10px] leading-relaxed text-ink-3" data-fade>
+              A PDF: every formula above, every column on the board and what it is for, the
+              tournament structure, and how the mock auctions differ from the graded run.
+            </p>
           </div>
 
           <div data-reveal>

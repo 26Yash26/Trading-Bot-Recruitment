@@ -34,6 +34,15 @@ secret/config.py
 # on the VM this lives in /var/lib/quantguild instead (see server/config.py).
 .local/
 
+# LaTeX build artefacts. `docs/scoring.pdf` IS committed — the doc should be
+# readable from a checkout without a TeX install; everything else regenerates.
+*.aux
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
 # Run artifacts
 logs/
 *.log

@@ -1,0 +1,611 @@
+% Scoring and leaderboard metrics for the Quant Guild Trading Bot competition.
+%
+% Build:  pdflatex scoring.tex   (twice, for the cross-references)
+%
+% This is the normative description of every number the leaderboard shows. It is
+% written against the code, not against the problem statement: where the two
+% could be read differently, what is here is what `src/auction/scoring.py`,
+% `src/auction/engine.py` and `harness/evaluate.py` actually do. Each definition
+% names the symbol it comes from so the two can be checked against each other.
+
+% TWO BUILDS, ONE SOURCE.
+%
+% Variations 3 and 4 are embargoed until mock auction 1, but the scoring is the
+% same for all four and participants need it from day one. So this file compiles
+% either way, and `scripts/build_docs.sh` produces both:
+%
+%   scoring-public.pdf   variations 1 and 2 — served now
+%   scoring.pdf          all four — served once the admin releases them
+%
+% `\ifreleased` guards every passage that would give away a V3 or V4 rule. If you
+% add one, guard it, and check with:  pdftotext scoring-public.pdf - | grep -i ...
+% (tests/test_embargo.py does exactly that.)
+\documentclass[11pt,a4paper]{article}
+
+\newif\ifreleased
+\ifdefined\RELEASED \releasedtrue \fi
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=2.4cm]{geometry}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{microtype}
+\usepackage[dvipsnames]{xcolor}
+\usepackage[colorlinks=true,linkcolor=NavyBlue,urlcolor=NavyBlue,
+            citecolor=NavyBlue]{hyperref}
+
+\newcommand{\code}[1]{\texttt{\small #1}}
+% Bookmarks are plain PDF strings: `\code` and math are not valid there.
+\pdfstringdefDisableCommands{\def\code#1{#1}}
+\newcommand{\clipf}{\operatorname{clip}}
+\newcommand{\sd}{\operatorname{sd}}
+
+\title{\textbf{Scoring and leaderboard metrics}\\[2mm]
+       \large Quant Guild Trading Bot competition, IIT Madras}
+\author{Odd semester 2026}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+The board does not rank on profit. It ranks on a \emph{doubly normalised} score:
+each block's profit is first divided by that block's hidden maximum value, and
+then standardised against the other nineteen bots that played the same block.
+This document defines that score and every figure reported beside it, gives the
+formula for each, and says which of them are ranking quantities and which are
+diagnostics. Section~\ref{sec:mock} covers the mock auctions, which run the same
+machinery but do not feed the final standing.
+\end{abstract}
+
+\tableofcontents
+
+% =====================================================================
+\section{Notation}
+\label{sec:notation}
+
+One \emph{game} is a group of $N = 20$ bots playing $T = 2000$ rounds, split
+into $B = 4$ blocks of $L = 500$. One \emph{iteration} is a fresh draw of groups
+across the whole field; a \emph{showdown} is a set of iterations played back to
+back and published as one leaderboard.
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Symbol & Meaning & Where it lives \\
+\midrule
+$i$ & a bot (index within its group) & \code{key} \\
+$b \in \{1,\dots,B\}$ & a block of $L$ rounds & \code{BlockSummary.block} \\
+$t$ & a round, $1 \le t \le T$ & \code{obs["round"]} \\
+$[m_b, M_b]$ & the block's hidden value bounds & \code{block\_bounds} (secret) \\
+$x_{i,t}$ & bot $i$'s private value in round $t$ & \code{obs["x"]} \\
+$n_t$ & players still solvent in round $t$ & \code{obs["num\_players"]} \\
+$X_t$ & $\max$ value over the \emph{active} players & \code{max\_value} \\
+$b_{(1)} \ge b_{(2)} \ge \dots$ & the round's bids, sorted & \code{sorted\_bids} \\
+$C_{i,t}$ & bot $i$'s capital after round $t$ & \code{Player.capital} \\
+$C^{\text{start}}_{i,b},\, C^{\text{end}}_{i,b}$ & capital at the block's ends &
+  \code{BlockSummary} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+$X_t$ is the maximum over the players \emph{active that round}. A bankrupt bot
+draws no value, so it contributes nothing to $X_t$ and is not counted in $n_t$.
+That is why $n_t$ is handed to every bot: as the field thins, $\mathbb{E}[X_t]$
+falls.
+
+% =====================================================================
+\section{What happens inside a block}
+
+\subsection{Values}
+Every active bot independently draws
+\begin{equation}
+  x_{i,t} \sim \mathcal{U}[m_b,\, M_b],
+\end{equation}
+with $[m_b, M_b]$ fixed within a block and redrawn at every boundary. Neither
+bound, nor the block index, nor the fact that a boundary has just happened, is
+ever reported to a bot. Detecting the regime change is part of the problem.
+
+\subsection{Capital}
+\label{sec:capital}
+Capital is redrawn independently for every bot at the start of every block:
+\begin{equation}
+  \kappa \sim \mathcal{U}[0.5,\, 2.5], \qquad
+  u \sim \mathcal{U}[-10,\, 10], \qquad
+  C^{\text{start}}_{i,b} = \max\!\left(\kappa M_b + u,\; 0.05\, M_b\right).
+  \label{eq:capital}
+\end{equation}
+What a bot finished the previous block with does \emph{not} carry over. The
+floor $0.05\,M_b$ only binds when $M_b$ is small; it exists to rule out a zero
+or negative starting capital.
+
+Two consequences that shape the whole score. First, within a block some bots
+start rich and some start poor, so a strategy that behaves identically on a
+half-$M_b$ bankroll and a $2.5 M_b$ one is being measured on exactly that.
+Second, because capital resets, the four blocks are four \emph{independent}
+tests: a bot cannot bank a good block and coast.
+
+\subsection{Legality and bankruptcy}
+The legal bid ceiling is the bot's own capital. A bid above it, negative,
+\code{NaN}, infinite, not a number, or not returned inside the per-round time
+limit is filed as a bid of $0$ for that round.
+
+Capital updates as $C_{i,t} = C_{i,t-1} + \text{payoff}$. A bot with
+$C_{i,t} \le 0$ is eliminated \emph{for the remainder of that block} and returns
+at the next boundary on a fresh draw from~\eqref{eq:capital}. Bankruptcy is
+therefore never fatal, but it forfeits the rest of the block, which is expensive
+in exactly the way Section~\ref{sec:survival} describes.
+
+\subsection{Payoffs}
+With $X = X_t$ and $b_1 \ge b_2 \ge \dots$ the sorted bids of the round:
+
+\begin{description}[leftmargin=2.2em,style=nextline]
+\item[Variation 1 — private value, first price]
+  The winner takes $x_i - b_1$, using \emph{the winner's own} value; everyone
+  else zero.
+\item[Variation 2 — common value, first price]
+  The winner takes $X - b_1$; everyone else zero.
+\ifreleased
+\item[Variation 3 — runner-up penalty]
+  \[
+    \pi^{(1)} = X - b_1, \qquad
+    \pi^{(2)} = -\tfrac12 \max\!\left(X - b_1,\; 0\right),
+  \]
+  and zero for everyone else. When the winner overpays the runner-up pays
+  nothing: the penalty never becomes a reward for the winner's loss.
+\item[Variation 4 — funded second price]
+  If $b_1 \le X$,
+  \[
+    \pi^{(1)} = X - b_2, \qquad \pi^{(2)} = X - b_1, \qquad
+    \pi^{(k)} = -\frac{w_k}{\sum_{j \in F} w_j}\left(\pi^{(1)} + \pi^{(2)}\right)
+    \ \ \text{for } k \in F,
+  \]
+  with $w_3 = 0.5$, $w_4 = 0.3$, $w_5 = 0.2$ and $F = \{3,4,5\} \cap \{1,\dots,n_t\}$.
+  The renormalisation is what keeps the round \emph{exactly zero-sum} when fewer
+  than five players are active; with $n_t \le 2$ no penalty is collected. If
+  instead $b_1 > X$, rank~1 alone takes $X - b_1$ and nobody else is touched —
+  that branch is not zero-sum, by design.
+\fi
+\end{description}
+
+\ifreleased\else
+\noindent
+Variations 3 and 4 are released after mock auction 1 and are not described here.
+Nothing below depends on which variation is being played: the scoring is
+identical for all four.
+\fi
+
+\noindent
+\textbf{Ties.} Variations 1 and 2 let \emph{every} bidder within $10^{-9}$ of
+the top bid win, each collecting the full payoff.\ifreleased{} Variations 3 and 4
+need distinct ranks, so ties there are broken uniformly at random.\fi
+
+% =====================================================================
+\section{The ranking quantity}
+\label{sec:score}
+
+\subsection{Step 1 --- normalised block profit \texorpdfstring{$\pi$}{pi}}
+\label{sec:pi}
+Raw profit is not comparable across blocks: a block with $M_b = 500$ pays out
+roughly fifty times one with $M_b = 10$, and inside a single block bots start
+from different capitals. So profit is measured in units of the block's own
+hidden maximum:
+\begin{equation}
+  \boxed{\;
+  \pi_{i,b} \;=\; \frac{C^{\text{end}}_{i,b} - C^{\text{start}}_{i,b}}{M_b}
+  \;}
+  \label{eq:pi}
+\end{equation}
+with $\pi_{i,b} := 0$ in the degenerate case $M_b \le 0$. A bot that went
+bankrupt ends the block on zero capital, so its
+$\pi_{i,b} = -C^{\text{start}}_{i,b} / M_b$, which
+by~\eqref{eq:capital} is at worst about $-2.5$.
+
+\emph{$\pi$ is the only quantity in the whole system with an absolute meaning.}
+Everything downstream is relative. $\pi_{i,b} > 0$ means the strategy made money
+that block; $\pi_{i,b} < 0$ means it lost money, however well it placed.
+
+\subsection{Step 2 --- standardisation within the group}
+\label{sec:points}
+Let $\mathcal{G}$ be the group that played block $b$ together, $|\mathcal{G}| = N$.
+Write
+\begin{equation}
+  \mu_b = \frac{1}{N}\sum_{j \in \mathcal{G}} \pi_{j,b},
+  \qquad
+  \sigma_b = \sqrt{\frac{1}{N}\sum_{j \in \mathcal{G}} (\pi_{j,b} - \mu_b)^2}
+\end{equation}
+(the \emph{population} standard deviation --- \code{statistics.pstdev} --- not
+the sample one; the twenty bots are the whole population of that block, not a
+sample from it). Then
+\begin{equation}
+  z_{i,b} = \clipf\!\left(\frac{\pi_{i,b} - \mu_b}{\sigma_b},\; -3,\; +3\right),
+  \qquad
+  \boxed{\; P_{i,b} = 50 + 15\, z_{i,b} \;}
+  \label{eq:points}
+\end{equation}
+so $P_{i,b} \in [5, 95]$, centred on $50$.
+
+Two edge cases are defined explicitly. If $\sigma_b = 0$ --- every bot in the
+group scored identically --- then $z_{i,b} := 0$ and everyone gets $50$; nobody
+is separated by a block that separated nobody. If the group has a single member,
+that member gets $50$.
+
+The $\pm 3$ clip is not cosmetic. Without it a single block in which one bot
+happened to draw a huge $\kappa$ and win a run of rounds could contribute
+several hundred points and decide the competition on variance rather than skill.
+Clipping caps any one block's contribution at $95$ and floors it at $5$.
+
+\subsection{Step 3 --- iteration score and total score}
+\begin{equation}
+  S^{\text{iter}}_{i} = \sum_{b=1}^{B} P_{i,b},
+  \qquad
+  \boxed{\; \text{\code{score}}_i = \sum_{\text{iterations } r} S^{\text{iter}}_{i,r} \;}
+  \label{eq:score}
+\end{equation}
+
+\noindent
+\textbf{\code{score} is the ranking quantity, and the only one.} With $B = 4$
+blocks per iteration and points centred on $50$, an average bot scores about
+$200$ per iteration; over a three-iteration showdown, about $600$.
+
+Because \code{score} is a \emph{sum}, a bot that played fewer iterations than the
+rest scores lower purely for that. This is what \code{mean\_block\_points}
+exists to correct, and it is the documented tie-break
+(Section~\ref{sec:ranking}).
+
+% =====================================================================
+\section{Every column on the board}
+\label{sec:metrics}
+
+Below, $\mathcal{B}_i$ is the multiset of all blocks bot $i$ played across the
+whole showdown ($|\mathcal{B}_i| = $ \code{blocks}) and $\mathcal{G}_i$ the set
+of games ($|\mathcal{G}_i| = $ \code{games}). All of these are computed in
+\code{harness/evaluate.py:aggregate}.
+
+\subsection{\code{score} --- Total score}
+Equation~\eqref{eq:score}. Higher is better. This is what the board sorts on.
+
+\subsection{\code{mean\_block\_points} --- Mean block score}
+\begin{equation}
+  \overline{P}_i = \frac{1}{|\mathcal{B}_i|} \sum_{b \in \mathcal{B}_i} P_{i,b}
+  \;\in\; [5, 95]
+\end{equation}
+\code{score} normalised by how much a bot actually played. It is the tie-break,
+and it is the honest number to quote when two bots played different numbers of
+games. Read it against $50$: above means the bot beat its group's average block,
+below means it did not.
+
+\subsection{\code{mean\_normalised\_profit} --- Mean \texorpdfstring{$\pi$}{pi}}
+\label{sec:meanpi}
+\begin{equation}
+  \boxed{\;
+  \overline{\pi}_i = \frac{1}{|\mathcal{B}_i|} \sum_{b \in \mathcal{B}_i} \pi_{i,b}
+  \;}
+\end{equation}
+\textbf{The absolute-profitability check.} Standardisation makes $P$ a purely
+relative statement: in a group where every bot loses money, somebody still
+scores $95$. $\overline{\pi}$ is the answer to ``but did it actually make
+money?''\ --- expressed in units of $M_b$, so $\overline{\pi} = +0.4$ means the
+strategy earned, on average, forty percent of the block's maximum value.
+
+A bot can rank first on \code{score} with $\overline{\pi} < 0$. That is not a
+contradiction and not a bug: it means the bot lost the least in a field that all
+lost. It is, however, exactly the situation a report should notice.\ifreleased{}
+In variations 3 and 4 it is common: those are transfer games, so the group's
+total $\pi$ cannot be positive in the branch where the winner did not overpay.\fi
+
+\subsection{\code{normalised\_profit\_spread} --- Consistency}
+\label{sec:consistency}
+\begin{equation}
+  \boxed{\;
+  s_i = \sqrt{\frac{1}{|\mathcal{B}_i|}
+        \sum_{b \in \mathcal{B}_i}\left(\pi_{i,b} - \overline{\pi}_i\right)^2}
+  \;}
+\end{equation}
+The population standard deviation of $\pi$ across \emph{all} blocks the bot
+played, in every game. \textbf{Lower is better}, and the board sorts this column
+ascending for that reason.
+
+This is the column that separates a strategy from a lottery ticket. Two bots can
+share a $\overline{\pi}$ of $+0.3$ with one earning $(0.3, 0.3, 0.3, 0.3)$ and
+the other $(1.5, -0.4, 0.3, -0.2)$; they are not the same bot, and the second
+one is one bad draw from bankruptcy. Note also that a large $s_i$ is often the
+signature of a bot that has \emph{not} detected the block boundary: it is tuned
+to one regime and is being carried by the blocks that happen to match it.
+
+The four blocks in an iteration differ deliberately in both scale and width, so
+$s_i$ measures robustness to the regime change, not just round-to-round noise.
+
+\subsection{\code{worst\_normalised\_profit} --- Worst block \texorpdfstring{$\pi$}{pi}}
+\begin{equation}
+  \pi^{\min}_i = \min_{b \in \mathcal{B}_i} \pi_{i,b}
+\end{equation}
+The tail, reported directly. $s_i$ can be dragged up by an unusually
+\emph{good} block, which is not a risk; $\pi^{\min}$ cannot. A bot whose
+$\pi^{\min}$ approaches $-\kappa$ (Section~\ref{sec:capital}) lost its entire
+starting capital in some block, which is the same statement as
+\code{survival\_rate} $< 1$.
+
+\subsection{\code{survival\_rate} --- Survival}
+\label{sec:survival}
+\begin{equation}
+  \boxed{\;
+  \rho_i = \frac{\#\{b \in \mathcal{B}_i : \text{not bankrupt at the end of } b\}}
+                {|\mathcal{B}_i|}
+  \;}
+\end{equation}
+The fraction of blocks the bot finished solvent; $1$ when it never went broke.
+A block counts as survived when $C^{\text{end}}_{i,b} > 0$ at the block's last
+round --- equivalently, when the bot was never eliminated during it.
+
+Survival is a \emph{diagnostic, not a penalty term}: it appears nowhere
+in~\eqref{eq:score}. It does not need to. Going bankrupt forfeits the remainder
+of the block, so those rounds earn nothing while the rest of the group keeps
+compounding, which drives $\pi_{i,b}$ to its floor and $P_{i,b}$ towards $5$.
+The scoring penalises bankruptcy through $\pi$; $\rho_i$ just tells you it
+happened, and how often.
+
+Read $\rho_i$ together with $\overline{\pi}_i$. A bot with $\overline{\pi} > 0$
+and $\rho < 1$ is one that funds good blocks with catastrophic ones --- the
+profile most likely to collapse when the hidden bounds change to ones it has
+never seen.
+
+\subsection{Raw profit columns}
+Reported for context, and never used to rank. With $\Delta_{i,g}$ the net profit
+of bot $i$ in game $g$ (the sum of $C^{\text{end}} - C^{\text{start}}$ over that
+game's blocks):
+\begin{align}
+  \text{\code{mean\_net\_profit}} &= \frac{1}{|\mathcal{G}_i|}\sum_{g} \Delta_{i,g}, &
+  \text{\code{std\_net\_profit}}  &= \sqrt{\frac{1}{|\mathcal{G}_i|}\sum_{g}
+      \left(\Delta_{i,g} - \overline{\Delta}_i\right)^2}, \\
+  \text{\code{best\_net\_profit}} &= \max_g \Delta_{i,g}, &
+  \text{\code{worst\_net\_profit}} &= \min_g \Delta_{i,g},
+\end{align}
+and \code{mean\_final\_capital} is the mean of $C^{\text{end}}$ over the last
+block of each game. These are in raw currency units and are therefore dominated
+by whichever blocks happened to have the largest $M_b$; that is precisely why
+they do not rank anybody.
+
+\subsection{Counters}
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Column & Definition & Note \\
+\midrule
+\code{games}    & $|\mathcal{G}_i|$ & group-games played this showdown \\
+\code{blocks}   & $|\mathcal{B}_i|$ & normally $B \times$ \code{games} \\
+\code{wins}     & rounds finishing rank 1 & in V1/V2 every tied top bidder wins \\
+\code{errors}   & \code{get\_bid} raised, or returned & each filed as a bid of $0$ \\
+                & a non-number, \code{NaN}, $\pm\infty$ or $<0$ & \\
+\code{timeouts} & rounds over the time limit & each filed as a bid of $0$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+An over-capital bid is \emph{not} counted as an error: it is legal to attempt
+and is simply filed as $0$. Only malformed returns are counted, which is why a
+bot can bleed capital through zero-bids with \code{errors} sitting at $0$.
+
+\noindent
+\code{wins} is a diagnostic and a deliberately misleading one if read alone: in
+variation 1 a bot that wins every round by overbidding has a large \code{wins}
+and a deeply negative $\pi$.\ifreleased{} In variation 4 rank 1 and rank 2 are
+\emph{both} paid, so \code{wins} counts only half the times the bot was in the
+money.\fi
+
+\subsection{Disqualification}
+\code{disqualified} is set by the sandbox, not by the scoring: a policy
+violation, a memory kill, or repeated failure to return. A disqualified bot
+keeps its computed row --- the numbers stay visible --- but always sorts last,
+below every bot that finished legally.
+
+% =====================================================================
+\section{Ranking and tie-breaks}
+\label{sec:ranking}
+
+Within each variation, rows are ordered by the key
+\begin{equation}
+  \Big(\;\mathbb{1}[\text{disqualified}],\;\; -\text{\code{score}},\;\;
+        -\text{\code{mean\_block\_points}}\;\Big)
+\end{equation}
+ascending. In words:
+\begin{enumerate}[nosep]
+  \item every legal bot outranks every disqualified one;
+  \item then by total score, highest first;
+  \item ties broken by mean block score, highest first --- which is what stops a
+        bot that played fewer games from being punished for the scheduler's
+        arithmetic rather than its own play.
+\end{enumerate}
+The four variations are ranked on four separate boards. There is no combined
+score across variations; a bot entered in one variation is not comparable to a
+bot entered in another, because $\pi$ is standardised against a different field.
+
+% =====================================================================
+\section{The tournament}
+\label{sec:tournament}
+
+A single 20-bot arrangement is far too noisy to rank on --- who you are grouped
+with matters as much as how you play.\ifreleased{} In variations 3 and 4, where
+payoffs move between players rather than being created by the auction, it matters
+more still.\fi{} So each variation is played over several iterations.
+
+\begin{center}
+\begin{tabular}{@{}cll@{}}
+\toprule
+Iteration & Grouping & What it does \\
+\midrule
+1 & random & the field shuffled into groups of 20 under seed $S_1$ \\
+2 & random, fresh seed & reshuffled independently: new distributions,
+                         capitals, opponents \\
+3 & strength-balanced & snake-seeded by cumulative points (below) \\
+4--5 & finals & the top \code{finals\_size} by cumulative score, head to head \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+\textbf{Snake seeding.} Bots are sorted by cumulative score and dealt into $G$
+groups in a serpentine: ranks $1 \dots G$ go to groups $1 \dots G$, ranks
+$G{+}1 \dots 2G$ go back down $G \dots 1$, and so on. Formally, the bot at
+sorted position $p$ (0-based) with $(r, c) = \operatorname{divmod}(p, G)$ lands
+in group
+\begin{equation}
+  g(p) = \begin{cases}
+    c & r \text{ even} \\
+    G - 1 - c & r \text{ odd.}
+  \end{cases}
+\end{equation}
+This \emph{balances} groups rather than segregating them: every group ends up
+with roughly the same average strength, which is what makes standardised scores
+comparable across groups.
+
+\textbf{Remainders.} Under random grouping, a trailing group smaller than half
+of $N$ is folded into the previous group rather than left to play mostly against
+filler bots. Snake seeding needs no such rule: it deals every bot into an
+existing group by construction.
+
+\textbf{Filler bots.} A group short of $N$ players is topped up with the three
+published sample bots so that the highest-bid race is a real one. Fillers play
+for real but never appear on a leaderboard and never contribute a row.
+
+\textbf{Independence.} Each iteration uses its own block schedule
+$\{[m_b, M_b]\}$, not merely the same schedule under a new seed, so iteration 2
+is a genuinely fresh test rather than a re-roll of the same one. Groups within
+an iteration are independent games and are run in parallel.
+
+Final ranking is the sum of the two finals iterations, tie-broken by the
+qualification total.
+
+\paragraph{How this maps onto a run.}
+\code{grouping} is set \emph{per iteration}, so the table above is one run:
+\code{["random", "random", "balanced", "finals", "finals"]}. Iterations play in
+order, and each one seeds on the standing after the ones before it --- a
+balanced iteration snake-seeds on iterations 1--2's points, and a finals
+iteration cuts the field on everything above it. A run whose iterations are all
+\code{random} needs no standing at all and does not consult one.
+
+A run may also be given a single mode, which then applies to every iteration; a
+schedule shorter than \code{iterations} holds its last entry. Where a run does
+need a standing it did not produce itself --- the first balanced run of a fresh
+board --- it takes the last finished showdown \emph{of its own kind}
+(Section~\ref{sec:mock}), never whichever board happened to finish most
+recently.
+
+% =====================================================================
+\section{Mock auctions}
+\label{sec:mock}
+
+Two mock showdowns run before the deadline. They use \emph{the same engine, the
+same sandbox, the same scoring and the same aggregation} as the graded run ---
+there is no separate code path --- and differ in settings, in what is done with
+the result, and in one recorded fact: every showdown is stamped with what it was
+for.
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Kind & What it is & Board \\
+\midrule
+\code{practice} & the clock, every \code{interval\_minutes} & rewritten by the next tick \\
+\code{mock}     & an announced mock auction & archived and published \\
+\code{final}    & the run after the deadline & the result \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+The stamp is not a label. A \code{balanced} or \code{finals} iteration seeds on
+a standing, and where that standing comes from decides who plays whom: seeding
+takes the last finished run \emph{of the same kind}, so a mock is seeded by the
+previous mock and never by a practice run against throwaway bounds. It is also
+what keeps a mock board reachable after the two-hourly clock has replaced the
+live one.
+
+\begin{center}
+\begin{tabular}{@{}llll@{}}
+\toprule
+ & \textbf{Mock auction 1} & \textbf{Mock auction 2} & \textbf{Final evaluation} \\
+\midrule
+Variations   & 1, 2            & \ifreleased 1, 2, 3, 4\else all released\fi
+             & \ifreleased 1, 2, 3, 4\else all released\fi \\
+Submissions  & optional        & optional          & required \\
+Grouping     & random          & random            & random $\times 2$, balanced, finals \\
+Iterations   & reduced         & reduced           & 3 qualification $+$ 2 finals \\
+Bounds       & throwaway       & throwaway         & the real hidden schedule \\
+Counts towards the result & no & no                & yes \\
+Also does    & \multicolumn{2}{l}{releases variations 3 and 4 (mock 1)} & \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+Four things follow, and they are the whole point of running them.
+
+\begin{enumerate}[leftmargin=1.4em]
+\item \textbf{A mock score is not a partial final score.} Nothing carries over.
+  The graded run starts from an empty board, on block bounds and seeds that have
+  never been published, against whatever field submits by the deadline. A mock
+  rank is a measurement, not a position.
+
+\item \textbf{The hidden bounds are different, deliberately.} The mocks are run
+  on a throwaway schedule. A bot tuned to the $\pi$ it earned in a mock is tuned
+  to a distribution that will not appear again --- which is the same trap the
+  local runner warns about, one level up.
+
+\item \textbf{The per-block table is the deliverable, not the rank.} Each
+  participant is sent their $(C^{\text{start}}_{b}, C^{\text{end}}_{b}, M_b,
+  \pi_b, P_b, \text{bankrupt})$ row for every block. That is where a bot's
+  failure mode is legible: a $\pi_b$ that collapses in exactly one block is a
+  bot that has not detected the boundary; a low $P_b$ against a healthy $\pi_b$
+  is a bot that is profitable but being out-played; a bankruptcy tells you which
+  block and which round.
+
+\item \textbf{Mock 1 is also the release gate.} The last two variations are
+  published the moment mock auction 1's results are, so their mock field
+  necessarily has fewer entrants and less-developed bots than the final one.
+  Read a mock 2 rank in a late-released variation with that in mind: the
+  standardisation in~\eqref{eq:points} is against \emph{that} field, and a thin
+  field of under-tuned bots makes $\sigma_b$ small and $z$ --- and so the whole
+  board --- unusually sensitive.
+\end{enumerate}
+
+\noindent
+Operationally, a mock run is an ordinary showdown triggered from the admin
+console and stamped \code{mock}; the practice board that rewrites itself every
+two hours is the same thing again, stamped \code{practice}, at a smaller size.
+Nothing on either is graded. The only run that is graded is the one after the
+final deadline, on settings that are not published until it has finished.
+
+% =====================================================================
+\section{Reading the board: three worked cases}
+
+\paragraph{A bot ranked 3rd with \texorpdfstring{$\overline{\pi} = -0.15$}{mean pi = -0.15}.}
+It is losing money in absolute terms and still beating most of its group. In V1
+or V2 that says the whole field is overbidding and the auction is dissipating its
+own surplus.\ifreleased{} In V3 or V4 it is unremarkable: those are transfer
+games, and the group's total $\pi$ cannot be positive in the branch where the
+winner did not overpay.\fi{} Check $\rho_i$: if it is $1$, the bot is simply
+being conservative in a bloodbath, which is a perfectly good strategy.
+
+\paragraph{A bot with \texorpdfstring{$\overline{P} = 62$ and $s = 1.1$}{mean P = 62 and s = 1.1}.}
+Strong on average, wildly inconsistent. With four blocks per iteration, an $s$
+of $1.1$ against a $\overline{\pi}$ of a few tenths means individual blocks are
+swinging by more than the block's own maximum value. Look at $\pi^{\min}$ and
+$\rho$: this is usually a bot that is excellent in one regime and bankrupt in
+another, and it will not survive a fresh block schedule.
+
+\paragraph{A bot with \texorpdfstring{$\rho = 0.75$}{survival = 0.75} and rank 1.}
+It went bankrupt in a quarter of its blocks and still tops the board, so the
+blocks it survived were dominant enough to absorb three $P$-values near the
+floor. That is a real result, but it is a $3\sigma$-clipped one: the clip
+in~\eqref{eq:points} caps how much its good blocks can earn while its bad ones
+sit at $5$. It is close to the point where one more bad draw flips the ranking,
+and it is the first bot to read by hand.
+
+\end{document}

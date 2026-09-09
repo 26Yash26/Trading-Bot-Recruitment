@@ -216,9 +216,94 @@ After this, a normal `git push` carries nginx changes too.
 | Inspect the database | `sudo -u quantguild sqlite3 /var/lib/quantguild/quantguild.db` |
 | Roll back a deploy | `git revert <sha> && git push` — the path unit restarts the API |
 
-### Before the mock auction (20 Sep)
+### Mock auction 1 — and releasing variations 3 and 4
 
 Back up `/var/lib/quantguild` first — it holds every submission.
+
+Mock auction 1 runs on variations 1 and 2 only. Releasing 3 and 4 is the same
+moment, and it is **irreversible**: once the kit has been downloaded it cannot
+be un-downloaded, so do the run first and the release second.
+
+1. **Back up.** `sudo tar czf ~/qg-$(date +%F).tar.gz /var/lib/quantguild`
+2. **Run the mock.** Admin → Showdown → **Mock auction** (not *Practice* — the
+   stamp decides whether the board is archived and what the next mock seeds on).
+   Let it finish, check the board, send participants their per-block numbers.
+   The board stays reachable from the leaderboard's *Boards* picker afterwards,
+   so the practice clock replacing the live one does not lose it.
+3. **Build the released kit** — locally, on a branch:
+
+   ```bash
+   python build_kit.py --release-v3-v4
+   python -m pytest tests/test_embargo.py tests/test_late_kit.py -q
+   ```
+
+   That pulls `late-kit/` into `public/starter-kit.zip`: `Template_3.py`,
+   `Template_4.py`, `README_v3_v4.md`, and the four-variation `local_test.py`
+   replacing the two-variation one. It also rewrites the embargo notice at the
+   top of the kit README. Commit the rebuilt zip — the VM has no build step.
+
+   Note that `test_committed_zip_is_what_a_fresh_build_produces` compares the
+   committed zip against a **pre-release** build, so it fails by design from
+   here on. Flip it, or drop it, in the same commit — do not leave a red suite
+   over an event weekend.
+
+4. **Push.** The deploy is the release: `/public/` is served `no-cache`, so the
+   kit URL changes meaning without anyone re-bookmarking anything.
+5. **Open the variations.** Admin → variations → tick 3 and 4. This is what
+   makes `/api/variations/late.js` return 200 instead of 404, pushes the new
+   rules to every open browser over the leaderboard SSE stream, and makes the
+   submit endpoint accept `_3.py` and `_4.py`. Nothing about V3 or V4 is on the
+   wire until this switch is flipped — verify with
+   `curl -sI https://quantguildiitm.in/api/variations/late.js`.
+6. **Announce**, with the banner in Admin → announcement.
+
+Steps 4 and 5 are independent: the kit can go out before the switch, or after.
+Doing 5 first with an un-rebuilt kit is the bad ordering — the site would
+describe two variations the download says nothing about.
+
+### Mock auction 2 (all four variations)
+
+Same as above minus the release. Set Admin → variations to all four before the
+run; a bot submitted for a variation that is not enabled is not collected by
+`Scheduler.collect_field`, so an unticked variation silently plays nobody.
+
+### Run kinds
+
+Every showdown is stamped `practice`, `mock` or `final`. It is not cosmetic:
+
+| | `practice` | `mock` | `final` |
+|---|---|---|---|
+| Started by | the clock, and the Practice button | the Mock button | the Final button |
+| Board | rewritten by the next tick | archived, listed on the site | archived, listed |
+| Seeds a balanced/finals run from | the last practice run | the last mock | the last final |
+
+The clock only ever produces `practice` runs, and a kind chosen in the console
+applies to **one** run and then falls back — a forgotten switch cannot mislabel
+the 2am tick. `POST /api/admin/run-now {"kind": ...}` is audited.
+
+### The final evaluation, in one run
+
+`grouping` is set per iteration, so §9 is one button rather than three sequential
+runs. Admin → Game & tournament → Grouping → **§9 in full** writes
+`["random", "random", "balanced", "finals", "finals"]`. Iterations play in order
+and each seeds on the standing after the ones before it. Set `iterations` to 5
+first, or the schedule is truncated.
+
+### The scoring PDF
+
+`docs/scoring.tex` builds two PDFs, both committed:
+
+```bash
+./scripts/build_docs.sh
+```
+
+`scoring-public.pdf` (variations 1 and 2) and `scoring.pdf` (all four).
+`/api/docs/scoring.pdf` serves whichever the released variations allow, so the
+switch that opens V3 and V4 swaps the document too — no separate step. The
+script refuses to finish if the public build mentions an unreleased variation,
+and `tests/test_embargo.py` checks the committed PDFs the same way.
+
+Rebuild and commit both whenever `scoring.tex` changes; the VM has no TeX.
 
 ### Sizing
 
