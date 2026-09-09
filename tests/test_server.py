@@ -98,8 +98,8 @@ def test_security_headers_are_set(client):
 def test_no_request_path_becomes_a_file_path(client, path):
     """Every one of these renders the SPA shell instead of a file.
 
-    The route is an allowlist — `/web/` and `/public/` are mounted, and
-    everything else returns index.html without consulting the filesystem — so
+    The route is an allowlist, `/web/` and `/public/` are mounted, and
+    everything else returns index.html without consulting the filesystem, so
     traversal has nothing to traverse.
     """
     response = client.get(path)
@@ -187,7 +187,7 @@ def test_admin_can_read_and_change_settings(as_admin):
 
 
 def test_unknown_settings_keys_are_ignored(as_admin):
-    """A typo — or an attempt to inject a new key — must not enter the table."""
+    """A typo, or an attempt to inject a new key, must not enter the table."""
     as_admin.patch(
         "/api/admin/settings",
         json={"totally_made_up": "value", "interval_minutes": 90},
@@ -262,13 +262,13 @@ class TestSubmitEndToEnd:
     straight to `ValueSampler`, which only understands a flat schedule; the
     moment the stored default became the nested per-iteration shape (§9), the
     unpack inside `ValueSampler.__init__` raised and FastAPI's default handler
-    turned that into a bare "Internal Server Error" — a response the frontend
+    turned that into a bare "Internal Server Error", a response the frontend
     then displayed as if the participant's own file had been rejected.
 
     `tests/test_distributions.py::TestValidateHandlesEveryStoredShape` pins the
     same bug below the sandbox; this pins it at the boundary a participant
     actually hits, using the store's real, current settings rather than a
-    hand-built one — so a future change to `DEFAULT_SETTINGS` that reintroduces
+    hand-built one, so a future change to `DEFAULT_SETTINGS` that reintroduces
     an incompatible shape fails here too.
     """
 
@@ -297,7 +297,7 @@ class TestSubmitEndToEnd:
             f"a well-formed bot must never crash the check: {response.text[:300]}"
         )
         # Whatever the verdict, it must be JSON with a message a participant can
-        # act on — never nginx/Starlette's plain-text "Internal Server Error".
+        # act on, never nginx/Starlette's plain-text "Internal Server Error".
         body = response.json()
         assert "message" in body or "detail" in body
         assert "internal server error" not in str(body).lower()
@@ -323,7 +323,7 @@ class TestBlockBoundsValidation:
     """`block_bounds` is typed into the console minutes before a run.
 
     M_b divides the normalised profit and scales every capital draw, so a zero,
-    a negative or an inverted pair does not degrade the showdown — it takes the
+    a negative or an inverted pair does not degrade the showdown, it takes the
     whole thing down. It used to be stored with no checks at all.
     """
 

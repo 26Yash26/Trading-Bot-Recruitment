@@ -93,7 +93,7 @@ BLOCK_RANGE_CHOICES = tuple(range(100, 10001, 100))
 def draw_block_bounds(rng, num_blocks: int) -> list[tuple[float, float]]:
     """``num_blocks`` independent ``(m_b, M_b)`` pairs off the grids above.
 
-    ``rng`` is a ``random.Random``, so a seed reproduces the schedule exactly —
+    ``rng`` is a ``random.Random``, so a seed reproduces the schedule exactly,
     which is what lets a showdown be replayed and what keeps every group inside
     one iteration on the same bounds.
     """
@@ -110,9 +110,9 @@ def normalise_block_bounds(value, *, num_blocks: int | None = None):
 
     Two shapes are accepted, because the tournament needs both:
 
-    * ``[(lo, hi), ...]`` — one schedule of blocks, reused by every iteration.
+    * ``[(lo, hi), ...]``, one schedule of blocks, reused by every iteration.
       This is what a single game takes, and what the engine tests pin against.
-    * ``[[(lo, hi), ...], ...]`` — a schedule per iteration, so iteration 2 faces
+    * ``[[(lo, hi), ...], ...]``, a schedule per iteration, so iteration 2 faces
       genuinely different hidden distributions from iteration 1 rather than the
       same ones under a fresh seed (problem statement §9).
 
@@ -135,7 +135,7 @@ def normalise_block_bounds(value, *, num_blocks: int | None = None):
             raise ValueError(f"{where}: max ({hi}) must be greater than min ({lo})")
         if hi <= 0:
             raise ValueError(
-                f"{where}: max must be positive — it is the divisor in the "
+                f"{where}: max must be positive, it is the divisor in the "
                 "normalised profit, and the scale of the capital draw"
             )
         return (lo, hi)

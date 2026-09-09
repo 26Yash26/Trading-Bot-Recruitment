@@ -5,7 +5,7 @@ On the VM these come from ``/etc/quantguild.env`` (systemd ``EnvironmentFile``),
 which lives outside ``/var/www/html``, owned root:quantguild and mode 640.
 
 The data directory holds the SQLite database and every uploaded bot file. It
-**must not** be inside the deployed repo — the VM serves that directory as
+**must not** be inside the deployed repo, the VM serves that directory as
 static files, so anything in it is one URL away from the public.
 """
 

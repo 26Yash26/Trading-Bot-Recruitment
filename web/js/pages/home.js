@@ -26,7 +26,7 @@ const STEPS = [
   {
     n: "02",
     title: "One blind number",
-    body: "Everybody bids at once. The legal range is zero to your own capital — over it, negative, NaN or late, and the engine files a zero for you that round.",
+    body: "Everybody bids at once. The legal range is zero to your own capital, over it, negative, NaN or late, and the engine files a zero for you that round.",
   },
   {
     n: "03",
@@ -36,7 +36,7 @@ const STEPS = [
   {
     n: "04",
     title: "Capital is reset",
-    body: "At every block boundary your capital is redrawn at 0.5 to 2.5 times the block's hidden maximum. What you finished the block with does not carry over — it is banked as points.",
+    body: "At every block boundary your capital is redrawn at 0.5 to 2.5 times the block's hidden maximum. What you finished the block with does not carry over, it is banked as points.",
   },
 ];
 
@@ -83,7 +83,7 @@ function tickerTape(rows, variations) {
       <span class="flex shrink-0 items-baseline gap-3 border-r border-line px-6 py-3 font-mono text-[11px]">
         <span class="text-ink-3">${row.variation ? `V${row.variation}` : "··"}</span>
         <span>${esc(row.key)}</span>
-        <span class="${value >= 0 ? "text-gain" : "text-loss"}">${value ? value.toFixed(1) : "—"}</span>
+        <span class="${value >= 0 ? "text-gain" : "text-loss"}">${value ? value.toFixed(1) : "-"}</span>
       </span>`;
   };
 
@@ -225,7 +225,7 @@ function timeline(state) {
 
 // --- page ----------------------------------------------------------------------
 
-/** Only the things this page draws — a progress tick must not rebuild the DOM. */
+/** Only the things this page draws: a progress tick must not rebuild the DOM. */
 function signature() {
   const state = store.state || {};
   return JSON.stringify([
@@ -279,7 +279,7 @@ export async function renderHome(app) {
           <p class="lede mt-10 max-w-xl" data-fade>
             Quant Guild recruitment runs as a sealed-bid auction. Your Python bot plays
             ${esc(state.num_rounds ?? 2000)} rounds against ${esc((state.group_size ?? 20) - 1)}
-            others across ${esc(blocks)} blocks — the value distribution and your capital are both
+            others across ${esc(blocks)} blocks. The value distribution and your capital are both
             redrawn at every boundary, and you are never told when one happens.
           </p>
 
@@ -292,7 +292,8 @@ export async function renderHome(app) {
           ${
             days !== null && days >= 0
               ? `<p class="mt-8 font-mono text-[11px] text-ink-3" data-fade>
-                   Final deadline ${esc(formatDeadline(state.deadline_iso))} —
+                   Final deadline ${esc(formatDeadline(state.deadline_iso))}
+                   &middot;
                    <span class="text-flame">${
                      days === 0 ? "today" : `${days} day${days === 1 ? "" : "s"} left`
                    }</span>
@@ -361,7 +362,7 @@ export async function renderHome(app) {
                </div>`
             : `<p class="mt-10 text-sm text-ink-2">
                  Every variation is switched off at the moment. Nothing is being played and nothing
-                 is being accepted — check back shortly.
+                 is being accepted. Check back shortly.
                </p>`
         }
 
@@ -369,7 +370,7 @@ export async function renderHome(app) {
           hidden.length
             ? `<p class="mt-8 border-l-2 border-line-2 pl-5 text-sm leading-relaxed text-ink-3" data-fade>
                  ${esc(hidden.map((id) => `Variation ${id}`).join(" and "))}
-                 ${hidden.length === 1 ? "is" : "are"} not released yet — the rules are published when
+                 ${hidden.length === 1 ? "is" : "are"} not released yet. The rules are published when
                  ${hidden.length === 1 ? "it opens" : "they open"}, after mock auction 1. Until then
                  files for ${hidden.length === 1 ? "it" : "them"} are not accepted and
                  ${hidden.length === 1 ? "it does" : "they do"} not appear on the board.

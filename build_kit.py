@@ -4,7 +4,7 @@
     python build_kit.py --release-v3-v4    # all four (after mock auction 1)
 
 Run this after changing anything under ``starter-kit/`` or ``late-kit/`` and
-commit the resulting zip — the VM serves files straight out of the repo and has
+commit the resulting zip, the VM serves files straight out of the repo and has
 no build step, so the archive has to be in git.
 
 TWO KITS, ONE FILENAME
@@ -18,7 +18,7 @@ supplement, and swaps ``local_test.py`` for the four-variation runner.
 The V3/V4 material is staged in ``late-kit/``, not ``starter-kit/``, for exactly
 the reason ``server/late_variations.js`` is not under ``web/``: a file that is
 not in the shipped set cannot leak from it. ``late-kit/`` is unreachable over
-HTTP — nginx resolves no path outside ``/web/`` and ``/public/`` — and it is on
+HTTP, nginx resolves no path outside ``/web/`` and ``/public/``, and it is on
 the deny-list as well.
 
 WHAT THE KIT MAY CONTAIN
@@ -26,7 +26,7 @@ WHAT THE KIT MAY CONTAIN
 Only the four things below. In particular the kit does **not** ship
 ``src/auction/`` or any copy of it. The engine source gives away the exact
 tie-break tolerance, the elimination rule, the group size, the number of
-iterations, and — before they are released — the whole of variations 3 and 4.
+iterations, and, before they are released, the whole of variations 3 and 4.
 Participants get the published rules and a black-box local runner; that is all
 they are entitled to and all they need.
 
@@ -75,7 +75,7 @@ EMBARGO_NOTICE = """> **Variations 1 and 2 only.** Variations 3 and 4 are releas
 
 RELEASED_NOTICE = """> **All four variations are open.** Variations 1 and 2 are described below.
 > Variations 3 and 4 have their own templates and their own supplement,
-> `README_v3_v4.md` — read that one too."""
+> `README_v3_v4.md`, read that one too."""
 
 #: The file tree at the top of the kit README, and what it becomes on release.
 #: A tree that does not list the files in the archive is worse than no tree.
@@ -99,7 +99,7 @@ starter-kit/
 ```"""
 
 #: Words that must not appear anywhere in the kit before variations 3 and 4 are
-#: released. Checked literally — the point is to catch a careless paste, not to
+#: released. Checked literally, the point is to catch a careless paste, not to
 #: be clever about it.
 EMBARGOED = (
     "variation 3",
@@ -231,7 +231,7 @@ if __name__ == "__main__":
     with zipfile.ZipFile(output) as archive:
         names = archive.namelist()
     which = "all four variations" if released else "variations 1 and 2"
-    print(f"  built {output.relative_to(REPO_ROOT)} — {which}")
+    print(f"  built {output.relative_to(REPO_ROOT)}, {which}")
     print(f"  {len(names)} files, {size_kb:.1f} KB")
     for name in names:
         print(f"    {name}")

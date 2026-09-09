@@ -24,7 +24,7 @@ Three consequences worth thinking about before you write a line:
   1. Second place is now the worst place to be. In variations 1 and 2 losing
      costs nothing, so bidding just under the winner was free. Here it is the
      only losing position that is charged, and it is charged in proportion to
-     how much the winner made -- so you are punished hardest exactly when you
+     how much the winner made, so you are punished hardest exactly when you
      were closest to a good win.
   2. The penalty is a fraction of the WINNER'S surplus, not of yours. You have
      no control over it once you are second. Your only control is over how
@@ -35,7 +35,7 @@ Three consequences worth thinking about before you write a line:
 
 You are never told X for the current round before you bid, only
 `max_value_last_round`. Ranks are distinct here, so ties are broken uniformly
-at random -- matching another bot's bid exactly is a coin flip, not a shared
+at random, matching another bot's bid exactly is a coin flip, not a shared
 win.
 """
 
@@ -97,7 +97,7 @@ class Bot:
         x = obs["x"]
 
         # `max_value_last_round` is a draw of X. Averaging it estimates E[X],
-        # which is what your payoff is actually measured against -- your own x
+        # which is what your payoff is actually measured against, your own x
         # only tells you where you sit in the field.
         if obs["round"] > 1:
             self.seen_max.append(obs["max_value_last_round"])

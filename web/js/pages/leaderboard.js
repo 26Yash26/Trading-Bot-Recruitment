@@ -18,7 +18,7 @@ let activeVariation = 0;
 let query = "";
 let sortKey = "rank";
 // `null` is the live board. Anything else is the id of an archived mock or
-// final showdown, whose rows are fetched once and then held — an archived board
+// final showdown, whose rows are fetched once and then held, an archived board
 // never changes, so it is deliberately NOT refreshed by the live stream.
 let archivedId = null;
 let archived = { id: null, rows: [], meta: null };
@@ -102,7 +102,7 @@ function detailGrid(row) {
       ${
         row.disqualified
           ? `<p class="mt-6 border-l-2 border-loss px-4 py-2 font-mono text-xs text-loss">
-               Disqualified — ${esc(row.reason || "sandbox violation")}
+               Disqualified: ${esc(row.reason || "sandbox violation")}
              </p>`
           : ""
       }
@@ -200,7 +200,7 @@ function archiveBar(state, meta) {
       ${
         meta
           ? `<p class="mt-4 font-mono text-[10px] leading-relaxed text-flame">
-               Archived ${esc(meta.kind)} board — ${esc(relativeTime(meta.finished_at))},
+               Archived ${esc(meta.kind)} board from ${esc(relativeTime(meta.finished_at))},
                ${esc(meta.games)} games. It is frozen: nothing here updates, and it does not
                carry into the final standing.
              </p>`
@@ -252,7 +252,7 @@ export async function renderLeaderboard(app) {
             ${(state.iterations ?? 3) === 1 ? "iteration" : "iterations"} of
             ${esc(state.num_rounds ?? 2000)} rounds in randomised groups of
             ${esc(state.group_size ?? 20)}. Each of the ${esc(state.num_blocks ?? 4)} blocks is
-            scored against the rest of the group and the scores are summed — so who you were drawn
+            scored against the rest of the group and the scores are summed, so who you were drawn
             against matters far less than how you played.
           </p>
           <p class="mt-6 font-mono text-[11px] text-ink-3" data-fade>
@@ -432,8 +432,8 @@ export async function renderLeaderboard(app) {
   let scheduled = null;
   const unsubscribe = store.subscribe(() => {
     clearTimeout(scheduled);
-    // Repainting while an archived board is up is harmless — `paint` reads from
-    // `archived` — but it still refreshes the countdown and the board list.
+    // Repainting while an archived board is up is harmless, `paint` reads from
+    // `archived`, but it still refreshes the countdown and the board list.
     scheduled = setTimeout(paint, 300);
   });
 

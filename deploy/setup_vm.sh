@@ -66,7 +66,7 @@ if [[ -f "$REPO/requirements.txt" ]]; then
     sha256sum "$REPO/requirements.txt" | cut -d' ' -f1 > /opt/quantguild/.requirements.sha256
     ok "dependencies installed"
 else
-    warn "no $REPO/requirements.txt yet — deploy the new code, then re-run this"
+    warn "no $REPO/requirements.txt yet, deploy the new code, then re-run this"
 fi
 
 # --- secrets -----------------------------------------------------------------
@@ -86,7 +86,7 @@ QG_PUBLIC_ORIGIN=http://35.226.121.223
 QG_OAUTH_REDIRECT_URI=http://35.226.121.223/api/auth/callback
 ENVEOF
     fi
-    warn "created /etc/quantguild.env — YOU MUST FILL IN the OAuth client and admin emails"
+    warn "created /etc/quantguild.env, YOU MUST FILL IN the OAuth client and admin emails"
 fi
 chown root:"$SVC_USER" /etc/quantguild.env
 chmod 640 /etc/quantguild.env
@@ -120,7 +120,7 @@ if compgen -G "$ASSETS/systemd/*" >/dev/null; then
         if systemctl is-active --quiet quantguild.service; then
             ok "quantguild.service is running"
         else
-            warn "quantguild.service failed — journalctl -u quantguild -n 40"
+            warn "quantguild.service failed, journalctl -u quantguild -n 40"
         fi
     else
         warn "server/ not deployed yet; leaving quantguild.service stopped"
@@ -169,7 +169,7 @@ if [[ -f "$ASSETS/nginx.conf" && -f "$ASSETS/nginx-app.conf" ]]; then
     fi
     ok "allowlist active on 80 and 443 (http=$http_ok https=$tls_ok); default site removed"
 else
-    warn "nginx.conf / nginx-app.conf not found next to this script — document root still exposed"
+    warn "nginx.conf / nginx-app.conf not found next to this script, document root still exposed"
 fi
 
 # --- belt and braces ---------------------------------------------------------
@@ -177,7 +177,7 @@ fi
 # $SVC_USER reads the code as "other". Stripping the "other" bits below would
 # then hide the very modules it imports (harness, src, ...). Give the service
 # group read+traverse on the checkout first, so it reaches the code through the
-# owner's group instead — then dropping "other" only shuts out the public.
+# owner's group instead, then dropping "other" only shuts out the public.
 log "service read access to the checkout"
 OWNER_GROUP=$(stat -c %G "$REPO")
 if [[ -n "$OWNER_GROUP" && "$OWNER_GROUP" != "$SVC_USER" ]]; then
@@ -219,7 +219,7 @@ cat <<'DONE'
 --------------------------------------------------------------------
 Remaining manual steps (they need values only you have):
 
-  1. Edit /etc/quantguild.env — Google OAuth client id/secret and
+  1. Edit /etc/quantguild.env, Google OAuth client id/secret and
      QG_ADMIN_EMAILS. Then: sudo systemctl restart quantguild
   2. Register the redirect URI in Google Cloud Console, exactly:
        <QG_PUBLIC_ORIGIN>/api/auth/callback

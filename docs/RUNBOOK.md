@@ -15,7 +15,7 @@ python -m scripts.seed_demo      # optional: 18 fake participants
 python -m server                 # http://localhost:8000
 ```
 
-That serves the API *and* the static site on one port — same routes as
+That serves the API *and* the static site on one port, same routes as
 production, minus nginx. Nothing else to start.
 
 `seed_demo` prints an admin session cookie. To open `/admin` locally:
@@ -27,9 +27,9 @@ QG_ADMIN_EMAILS=demo.admin@smail.iitm.ac.in python -m server
 then paste the printed `qg_session=...` into a cookie for `localhost`. (With
 real Google OAuth configured you just sign in instead.)
 
-To see a leaderboard immediately, open `/admin`, set **rounds per game** to 300
-and **repeats** to 1, and press **Run a showdown now** — that takes a few
-seconds instead of a few minutes.
+To see a leaderboard immediately, open `/admin`, set **rounds per game** to 300,
+cut the iteration list down to one row, and press **Run a showdown now**. That
+takes a few seconds instead of a few minutes.
 
 ### Editing the frontend
 
@@ -38,17 +38,17 @@ seconds instead of a few minutes.
 ```
 
 It downloads Tailwind's standalone binary into `~/.cache/quantguild` on first
-run. No node, no npm, no `node_modules`. **Commit `web/css/app.css`** — the VM
+run. No node, no npm, no `node_modules`. **Commit `web/css/app.css`**, the VM
 does not build anything.
 
 ### Tests
 
 ```bash
-pytest                # 86 tests
+pytest                # 284 tests
 pytest tests/test_sandbox.py -v   # the ones that matter
 ```
 
-Run this on Linux/macOS/WSL — the sandbox is POSIX-only, so on native Windows the
+Run this on Linux/macOS/WSL, the sandbox is POSIX-only, so on native Windows the
 bot-spawning tests skip (you'll see ~10 skips, 0 failures; the AST-policy tests
 still run). No CI runs `pytest` yet, so run it yourself before merging.
 
@@ -104,7 +104,7 @@ console.cloud.google.com → APIs & Services → Credentials → OAuth client ID
 - Authorised JavaScript origin: `https://quantguildiitm.in`
 - Authorised redirect URI: `https://quantguildiitm.in/api/auth/callback`
 
-It must match `QG_OAUTH_REDIRECT_URI` exactly — no trailing slash.
+It must match `QG_OAUTH_REDIRECT_URI` exactly, no trailing slash.
 
 ### 6. systemd
 
@@ -120,7 +120,7 @@ sudo systemctl status quantguild.service
 ```
 
 `quantguild-deploy.path` watches `/var/www/html/.git/FETCH_HEAD` and restarts
-the API whenever Actions deploys — the workflow itself restarts nothing, and
+the API whenever Actions deploys, the workflow itself restarts nothing, and
 `.github/` is not to be edited.
 
 ### 7. nginx
@@ -150,7 +150,7 @@ sudo certbot --nginx -d quantguildiitm.in -d www.quantguildiitm.in
 ```
 
 Then set `QG_PUBLIC_ORIGIN=https://quantguildiitm.in` in `/etc/quantguild.env`
-and `sudo systemctl restart quantguild` — session cookies only get the `Secure`
+and `sudo systemctl restart quantguild`, session cookies only get the `Secure`
 flag when the origin is HTTPS.
 
 ### 9. First run
@@ -161,9 +161,9 @@ Open `/admin` (signed in with an email from `QG_ADMIN_EMAILS`):
    **Docker**, in green.
 2. **Sandbox & secrets** → set the four hidden `(min, max)` distribution bounds
    and the master seed. These are never sent to a browser.
-3. **Showdown** → set the interval, rounds, repeats and starting capitals.
-   Watch the estimated cost — it warns if a showdown would take more than 70% of
-   the interval.
+3. **Showdown** → set the interval and the rounds, and **Game & tournament** →
+   the iteration list. Watch the estimated cost: it warns if a showdown would
+   take more than 70% of the interval.
 4. Press **Run a showdown now** to prove the pipeline end to end.
 
 ---
@@ -175,7 +175,7 @@ Open `/admin` (signed in with an email from `QG_ADMIN_EMAILS`):
 and never reach production.
 
 The systemd unit runs `/opt/quantguild/bin/apply-deploy.sh` and nginx reads
-`/etc/nginx/snippets/quantguild-app.conf` — both are *copies* installed by
+`/etc/nginx/snippets/quantguild-app.conf`, both are *copies* installed by
 `setup_vm.sh`, which is run by hand. So the repo can say one thing while the VM
 does another, with nothing to indicate it. `apply-deploy.sh` now syncs the nginx
 snippet on every deploy, but that change cannot install itself.
@@ -184,7 +184,7 @@ snippet on every deploy, but that change cannot install itself.
 cd /var/www/html
 git log -1 --format='%h %s'          # confirm the deploy landed first
 
-# The caching fix — static assets must revalidate, or a deploy strands anyone
+# The caching fix, static assets must revalidate, or a deploy strands anyone
 # with the site open on a half-stale ES module graph (blank page, no error).
 sudo install -m 644 deploy/nginx-app.conf /etc/nginx/snippets/quantguild-app.conf
 sudo nginx -t && sudo systemctl reload nginx
@@ -214,23 +214,23 @@ After this, a normal `git push` carries nginx changes too.
 | Ban a roll number | Admin → Submissions → **Ban** |
 | Back up everything | `sudo tar czf ~/qg-$(date +%F).tar.gz /var/lib/quantguild` |
 | Inspect the database | `sudo -u quantguild sqlite3 /var/lib/quantguild/quantguild.db` |
-| Roll back a deploy | `git revert <sha> && git push` — the path unit restarts the API |
+| Roll back a deploy | `git revert <sha> && git push`, the path unit restarts the API |
 
-### Mock auction 1 — and releasing variations 3 and 4
+### Mock auction 1, and releasing variations 3 and 4
 
-Back up `/var/lib/quantguild` first — it holds every submission.
+Back up `/var/lib/quantguild` first, it holds every submission.
 
 Mock auction 1 runs on variations 1 and 2 only. Releasing 3 and 4 is the same
 moment, and it is **irreversible**: once the kit has been downloaded it cannot
 be un-downloaded, so do the run first and the release second.
 
 1. **Back up.** `sudo tar czf ~/qg-$(date +%F).tar.gz /var/lib/quantguild`
-2. **Run the mock.** Admin → Showdown → **Mock auction** (not *Practice* — the
+2. **Run the mock.** Admin → Showdown → **Mock auction** (not *Practice*, the
    stamp decides whether the board is archived and what the next mock seeds on).
    Let it finish, check the board, send participants their per-block numbers.
    The board stays reachable from the leaderboard's *Boards* picker afterwards,
    so the practice clock replacing the live one does not lose it.
-3. **Build the released kit** — locally, on a branch:
+3. **Build the released kit**, locally, on a branch:
 
    ```bash
    python build_kit.py --release-v3-v4
@@ -240,11 +240,11 @@ be un-downloaded, so do the run first and the release second.
    That pulls `late-kit/` into `public/starter-kit.zip`: `Template_3.py`,
    `Template_4.py`, `README_v3_v4.md`, and the four-variation `local_test.py`
    replacing the two-variation one. It also rewrites the embargo notice at the
-   top of the kit README. Commit the rebuilt zip — the VM has no build step.
+   top of the kit README. Commit the rebuilt zip, the VM has no build step.
 
    Note that `test_committed_zip_is_what_a_fresh_build_produces` compares the
    committed zip against a **pre-release** build, so it fails by design from
-   here on. Flip it, or drop it, in the same commit — do not leave a red suite
+   here on. Flip it, or drop it, in the same commit, do not leave a red suite
    over an event weekend.
 
 4. **Push.** The deploy is the release: `/public/` is served `no-cache`, so the
@@ -253,12 +253,12 @@ be un-downloaded, so do the run first and the release second.
    makes `/api/variations/late.js` return 200 instead of 404, pushes the new
    rules to every open browser over the leaderboard SSE stream, and makes the
    submit endpoint accept `_3.py` and `_4.py`. Nothing about V3 or V4 is on the
-   wire until this switch is flipped — verify with
+   wire until this switch is flipped, verify with
    `curl -sI https://quantguildiitm.in/api/variations/late.js`.
 6. **Announce**, with the banner in Admin → announcement.
 
 Steps 4 and 5 are independent: the kit can go out before the switch, or after.
-Doing 5 first with an un-rebuilt kit is the bad ordering — the site would
+Doing 5 first with an un-rebuilt kit is the bad ordering, the site would
 describe two variations the download says nothing about.
 
 ### Mock auction 2 (all four variations)
@@ -278,16 +278,35 @@ Every showdown is stamped `practice`, `mock` or `final`. It is not cosmetic:
 | Seeds a balanced/finals run from | the last practice run | the last mock | the last final |
 
 The clock only ever produces `practice` runs, and a kind chosen in the console
-applies to **one** run and then falls back — a forgotten switch cannot mislabel
+applies to **one** run and then falls back, a forgotten switch cannot mislabel
 the 2am tick. `POST /api/admin/run-now {"kind": ...}` is audited.
 
-### The final evaluation, in one run
+### What a showdown is
 
-`grouping` is set per iteration, so §9 is one button rather than three sequential
-runs. Admin → Game & tournament → Grouping → **§9 in full** writes
-`["random", "random", "balanced", "finals", "finals"]`. Iterations play in order
-and each seeds on the standing after the ones before it. Set `iterations` to 5
-first, or the schedule is truncated.
+A showdown is the whole tournament: five iterations, the first two on random
+groups, the third strength balanced, the last two a finals between the leading
+`finals_size` bots. That is the shipped default, so an ordinary Run now already
+plays it.
+
+Admin → Game & tournament → **Iterations in a showdown** is the control. It is
+one list: each row is an iteration and its grouping, `+ add an iteration` and
+the `x` on a row change the count, and every button saves immediately.
+`iterations` follows the length of the list, so the two cannot disagree. The
+**standard showdown** preset rewrites the list to the five above.
+
+There used to be a separate "Iterations per variation" number field. It saved
+only on the Save button while the grouping buttons saved immediately, so typing
+5 and then clicking a grouping repainted the page and threw the 5 away, and the
+extra iterations could never be given a mode. The number field is gone.
+
+### Running one variation at a time
+
+The variation chips above the Run buttons say what **this run** covers. They are
+not the release switch. Turn some off to replay a single variation.
+
+That is safe because the live board takes each variation from the newest run
+that scored it, so the others keep whatever they had. A run refuses a variation
+that is not released, rather than quietly playing nobody.
 
 ### The scoring PDF
 
@@ -299,7 +318,7 @@ first, or the schedule is truncated.
 
 `scoring-public.pdf` (variations 1 and 2) and `scoring.pdf` (all four).
 `/api/docs/scoring.pdf` serves whichever the released variations allow, so the
-switch that opens V3 and V4 swaps the document too — no separate step. The
+switch that opens V3 and V4 swaps the document too, no separate step. The
 script refuses to finish if the public build mentions an unreleased variation,
 and `tests/test_embargo.py` checks the committed PDFs the same way.
 
@@ -314,5 +333,5 @@ participants the cost per showdown is roughly
 variations × repeats × ceil(n / 20) × len(starting_capitals) × 15 s ÷ workers
 ```
 
-100 participants, 3 variations, 3 repeats, 1 capital, 4 workers ≈ 11 minutes —
+100 participants, 3 variations, 3 repeats, 1 capital, 4 workers ≈ 11 minutes,
 comfortable inside a 2-hour interval. The admin page computes this for you.

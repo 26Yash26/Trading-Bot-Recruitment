@@ -97,7 +97,7 @@ class TestBoundsPerIteration:
     """Problem statement §9 wants iteration 2 to face *different distributions*,
     not the same ones under a fresh seed.
 
-    `bounds_mode="random"` gets that for free — every iteration draws its own
+    `bounds_mode="random"` gets that for free, every iteration draws its own
     blocks off the grids. These tests cover the other mode, `"fixed"`, where an
     admin supplies the schedules by hand to reproduce a specific run.
     """
@@ -168,7 +168,7 @@ class TestValidateHandlesEveryStoredShape:
     The moment `server.store.DEFAULT_SETTINGS["block_bounds"]` became the
     nested per-iteration shape from `bounds_for_iteration` (§9), every upload
     hit `ValueError: too many values to unpack` inside the request handler and
-    came back as a bare "Internal Server Error" — correct-looking code, wrong
+    came back as a bare "Internal Server Error", correct-looking code, wrong
     shape of data, and nothing here would have caught it since `validate()` had
     no test of its own.
 
@@ -200,7 +200,7 @@ class TestValidateHandlesEveryStoredShape:
         assert all(len(pair) == 2 for pair in schedules[0])
 
     def test_the_actual_stored_default_does_not_crash(self):
-        """Not a synthetic shape — the literal value a fresh database holds."""
+        """Not a synthetic shape, the literal value a fresh database holds."""
         from server.store import DEFAULT_SETTINGS
 
         schedules = normalise_block_bounds(DEFAULT_SETTINGS["block_bounds"])
@@ -210,7 +210,7 @@ class TestValidateHandlesEveryStoredShape:
 class TestTheBoundsGrids:
     """The hidden bounds are drawn off two grids, not chosen by hand.
 
-    The grids ARE published — participants are told the shape of the problem.
+    The grids ARE published, participants are told the shape of the problem.
     What is withheld is the seed, so which of the 10,000 blocks they face is
     unknowable in advance and unrepeatable between showdowns.
     """
@@ -251,7 +251,7 @@ class TestTheBoundsGrids:
 
     def test_scale_and_width_move_independently(self):
         """Both grids span two orders of magnitude, and the floor does not
-        predict the width — otherwise there is one block shape, not 10,000."""
+        predict the width, otherwise there is one block shape, not 10,000."""
         import random
         import statistics
 

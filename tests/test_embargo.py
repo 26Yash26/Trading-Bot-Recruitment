@@ -2,7 +2,7 @@
 
 Variations 3 and 4 are released after mock auction 1. Between the orientation
 session and that moment there are exactly two things a participant can get hold
-of — the starter kit zip, and whatever the browser is served — so both are
+of, the starter kit zip, and whatever the browser is served, so both are
 checked here. These are cheap tests guarding an irreversible mistake: once the
 V4 rules have been downloaded, they cannot be un-downloaded.
 """
@@ -29,7 +29,7 @@ except ImportError:  # pragma: no cover - fastapi is a hard dependency
 def client():
     """A test client whose settings changes are rolled back afterwards.
 
-    These tests flip `variations` around, which is a stored setting — leaving it
+    These tests flip `variations` around, which is a stored setting, leaving it
     on [1, 2, 3, 4] would quietly change what every later test sees.
     """
     before = store.get_settings().get("variations")
@@ -42,7 +42,7 @@ WEB_DIR = REPO_ROOT / "web"
 KIT_ZIP = REPO_ROOT / "public" / "starter-kit.zip"
 
 #: Phrases that give away a variation that has not been released. Deliberately
-#: about the *rules*, not the bare digits 3 and 4 — "variation 3" appears in
+#: about the *rules*, not the bare digits 3 and 4, "variation 3" appears in
 #: perfectly innocent copy like "variations 3 and 4 open later".
 GIVEAWAYS = (
     "runner-up penalty",
@@ -54,7 +54,7 @@ GIVEAWAYS = (
     "zero-sum",
     "0.5, 0.3 and 0.2",
     "ranks 3-5",
-    "ranks 3–5",
+    "ranks 3 to 5",
 )
 
 
@@ -71,7 +71,7 @@ def test_kit_contains_only_allowed_files():
     with zipfile.ZipFile(KIT_ZIP) as archive:
         names = {n.split("/", 1)[1] for n in archive.namelist()}
     assert names == set(build_kit.ALLOWED), (
-        "starter-kit.zip does not match build_kit.ALLOWED — "
+        "starter-kit.zip does not match build_kit.ALLOWED, "
         "rerun `python build_kit.py` and commit the zip"
     )
 
@@ -96,7 +96,7 @@ def test_committed_zip_is_what_a_fresh_build_produces(tmp_path):
 
     `test_kit_contains_only_allowed_files` only compares NAMES, so editing
     `Template.py` and forgetting `python build_kit.py` shipped a stale kit with
-    every test still green. Compare the bytes of each member instead — the zip's
+    every test still green. Compare the bytes of each member instead, the zip's
     own container bytes differ run to run (timestamps), so they are not
     comparable, but its contents are.
     """
@@ -123,7 +123,7 @@ def test_late_kit_is_staged_outside_the_shipped_directory():
     assert build_kit.LATE_DIR.is_dir(), "late-kit/ is missing"
     for name in build_kit.LATE_ALLOWED:
         assert (build_kit.LATE_DIR / name).is_file(), f"late-kit/{name} is missing"
-    # `local_test.py` maps onto itself on purpose — the four-variation runner
+    # `local_test.py` maps onto itself on purpose, the four-variation runner
     # replaces the two-variation one. Everything else must be genuinely new.
     added = set(build_kit.LATE_ALLOWED.values()) - {"local_test.py"}
     assert not (added & set(build_kit.ALLOWED)), (
@@ -191,7 +191,7 @@ def test_build_kit_refuses_unexpected_files(tmp_path, monkeypatch):
 
 
 def test_build_kit_refuses_unexpected_late_kit_files():
-    """`late-kit/` is audited on every build, released or not — a stray engine
+    """`late-kit/` is audited on every build, released or not, a stray engine
     file there is a leak waiting for someone to flip the release switch."""
     stray = build_kit.LATE_DIR / "_stray_test_file.py"
     stray.write_text("# left here by accident\n", encoding="utf-8")
@@ -259,7 +259,7 @@ def test_the_full_scoring_pdf_actually_describes_them():
 
 def test_the_scoring_pdf_is_gated_the_same_way_late_js_is(client):
     """It carries the V3 and V4 payoff rules, so before release the full
-    document must not be reachable — the public variant is served instead."""
+    document must not be reachable, the public variant is served instead."""
     store.update_settings({"variations": [1, 2]})
     before = client.get("/api/docs/scoring.pdf")
     assert before.status_code == 200
@@ -269,7 +269,7 @@ def test_the_scoring_pdf_is_gated_the_same_way_late_js_is(client):
     after = client.get("/api/docs/scoring.pdf")
     assert after.status_code == 200
     assert len(after.content) != len(before.content), (
-        "the same PDF is served before and after release — the gate does nothing"
+        "the same PDF is served before and after release, the gate does nothing"
     )
     assert after.content == SCORING_FULL.read_bytes()
     assert before.content == SCORING_PUBLIC.read_bytes()

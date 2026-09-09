@@ -5,8 +5,8 @@ substrings (``"import os"``, ``"__class__"``, ...), which loses to
 ``__im`` ``port__`` or ``getattr(obj, "__cla" + "ss__")``. Parsing to an AST and
 allowing only what we recognise closes that whole family.
 
-What survives here still has to get past the process sandbox (layers 2 and 3) —
-this layer exists to reject obvious abuse with a clear message at submission
+What survives here still has to get past the process sandbox (layers 2 and 3).
+This layer exists to reject obvious abuse with a clear message at submission
 time, not to be the only thing standing between a participant and the VM.
 """
 
@@ -18,12 +18,12 @@ from dataclasses import dataclass
 # Modules a bidding strategy has any business importing.
 ALLOWED_MODULES = frozenset(
     {
-        # stdlib — pure computation
+        # stdlib, pure computation
         "math", "cmath", "random", "statistics", "decimal", "fractions",
         "itertools", "functools", "operator", "collections", "heapq", "bisect",
         "array", "copy", "enum", "dataclasses", "typing", "numbers", "abc",
         "string", "re", "json", "time", "datetime", "warnings",
-        # third-party — numeric stack
+        # third-party, numeric stack
         "numpy", "pandas", "scipy", "sklearn", "statsmodels",
     }
 )
@@ -33,7 +33,7 @@ ALLOWED_MODULES = frozenset(
 # __builtins__, __loader__ and __spec__ belong here, not just in _ESCAPE_ATTRS:
 # they are implicit BARE globals in every module's namespace (no import, no
 # attribute access needed), and CPython gives a non-__main__ module's
-# __builtins__ as a *dict*, not the builtins module — so `__builtins__.eval` is
+# __builtins__ as a *dict*, not the builtins module, so `__builtins__.eval` is
 # an AttributeError, but `__builtins__["eval"]` hands back the real eval() with
 # nothing else in this file noticing, because Subscript is not inspected at
 # all. __loader__/__spec__ carry a loader object whose get_data(path) reads an
@@ -61,8 +61,8 @@ _ESCAPE_ATTRS = frozenset(
 
 # `.format` / `.format_map` / `.vformat` are a second, unrelated route to the
 # same destination: the dotted path in `"{0.__class__.__bases__}".format(x)`
-# lives inside a string literal, so it is never an ast.Attribute node at all —
-# nothing above ever sees it. string.Formatter (string IS an allowed import)
+# lives inside a string literal, so it is never an ast.Attribute node at all.
+# Nothing above ever sees it. string.Formatter (string IS an allowed import)
 # reaches the identical mini-language via .vformat. There is no legitimate use
 # a bidding bot has for template formatting that an f-string (whose
 # interpolated attributes DO go through visit_Attribute, since Python parses
@@ -122,14 +122,14 @@ class _Visitor(ast.NodeVisitor):
             self._flag(node, f"attribute '{name}' {why}")
         elif name in BANNED_NAMES:
             # A banned name is just as dangerous reached via `.name` on some
-            # other allowed object as it is called bare — `mod.eval`, not just
+            # other allowed object as it is called bare, `mod.eval`, not just
             # `eval`. The dunder check above never fires for these since none
             # of eval/exec/open/... are dunder-shaped.
             self._flag(node, f"attribute '{name}' is not allowed")
         elif name in _FORMAT_ATTRS:
             self._flag(
                 node,
-                f"'{name}' is not allowed — it can read attributes named in a "
+                f"'{name}' is not allowed, it can read attributes named in a "
                 "string, invisibly to this check; use an f-string or % formatting",
             )
         self.generic_visit(node)

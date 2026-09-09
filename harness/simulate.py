@@ -2,7 +2,7 @@
 
 The engine itself is untouched: ``SandboxedBotFactory`` is callable and returns
 an object with ``get_bid``, which is all ``auction.player.Player`` ever wanted
-from a bot class. Everything here is about *bookkeeping* — which real
+from a bot class. Everything here is about *bookkeeping*, which real
 participant sat in which seat, and what the sandbox thought of them afterwards.
 """
 
@@ -103,8 +103,8 @@ def make_groups(
 
     Without ``seeding`` this is the random draw used by iterations 1 and 2. With
     it, groups are strength-*balanced* rather than segregated: bots are sorted by
-    cumulative points and dealt out in a snake — 1 to G1, 2 to G2, ... , 20 to
-    G20, 21 back to G20, 22 to G19 — so every group ends up roughly equal in
+    cumulative points and dealt out in a snake, 1 to G1, 2 to G2, ..., 20 to
+    G20, 21 back to G20, 22 to G19, so every group ends up roughly equal in
     average strength, which is what makes the standardised scores comparable
     across groups.
 

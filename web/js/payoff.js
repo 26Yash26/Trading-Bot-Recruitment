@@ -11,7 +11,7 @@
 
 import { VARIATION_META, clamp, esc, signed } from "./ui.js";
 
-// Kept outside the render so a repaint — a new leaderboard, a settings change —
+// Kept outside the render so a repaint, a new leaderboard, a settings change,
 // does not throw away the reader's sliders.
 const bench = { x: 62, bid: 48, rival: 42, max: 70 };
 
@@ -90,7 +90,7 @@ function benchRow(id) {
 
 /**
  * Your payoff, given the bench state. Returns the number plus a sentence
- * explaining where it came from — the sentence is the point of the exercise.
+ * explaining where it came from, the sentence is the point of the exercise.
  */
 function evaluate(id, { x, bid, rival, max }) {
   const won = bid >= rival;
@@ -102,14 +102,14 @@ function evaluate(id, { x, bid, rival, max }) {
     return won
       ? { value: x - bid, formula: `${x.toFixed(1)} − ${bid.toFixed(1)}`,
           note: x - bid >= 0 ? "you kept your own surplus" : "you paid more than it was worth to you" }
-      : { value: 0, formula: "—", note: "rank 2 scores nothing in this variation" };
+      : { value: 0, formula: "-", note: "rank 2 scores nothing in this variation" };
   }
 
   if (id === 2) {
     return won
       ? { value: surplus, formula: `${max.toFixed(1)} − ${bid.toFixed(1)}`,
           note: surplus >= 0 ? "you kept the common surplus" : "you outbid the field maximum" }
-      : { value: 0, formula: "—", note: "rank 2 scores nothing in this variation" };
+      : { value: 0, formula: "-", note: "rank 2 scores nothing in this variation" };
   }
 
   // Variations 3 and 4 are priced by `server/late_variations.js`, which only
@@ -119,7 +119,7 @@ function evaluate(id, { x, bid, rival, max }) {
   // and the module finishing its import.
   const late = lateEvaluate(id, { x, bid, rival, max });
   if (late) return late;
-  return { value: 0, formula: "—", note: "not released yet" };
+  return { value: 0, formula: "-", note: "not released yet" };
 }
 
 // --- variations released later -------------------------------------------------

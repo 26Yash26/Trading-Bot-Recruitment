@@ -1,4 +1,4 @@
-"""Internal engine runner — plays a bot against the sample bots on the real rules.
+"""Internal engine runner, plays a bot against the sample bots on the real rules.
 
     python run_local.py --bot some_bot.py --variation 4
 
@@ -98,7 +98,7 @@ def main() -> None:
         flag = "  BANKRUPT" if b.bankrupt else ""
         print(f"  {b.block:>5}  {b.block_max:>8.1f}  {b.start_capital:>10.2f}  "
               f"{b.end_capital:>10.2f}  {b.normalised_profit:>+8.3f}  {b.points:>7.1f}{flag}")
-    print(f"\n  raw net profit {you.net_profit:+.2f} — reported, but not what ranks you.")
+    print(f"\n  raw net profit {you.net_profit:+.2f}, reported, but not what ranks you.")
 
 
 if __name__ == "__main__":

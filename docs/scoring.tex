@@ -14,8 +14,8 @@
 % same for all four and participants need it from day one. So this file compiles
 % either way, and `scripts/build_docs.sh` produces both:
 %
-%   scoring-public.pdf   variations 1 and 2 — served now
-%   scoring.pdf          all four — served once the admin releases them
+%   scoring-public.pdf   variations 1 and 2, served now
+%   scoring.pdf          all four, served once the admin releases them
 %
 % `\ifreleased` guards every passage that would give away a V3 or V4 rule. If you
 % add one, guard it, and check with:  pdftotext scoring-public.pdf - | grep -i ...
@@ -120,7 +120,7 @@ The bounds themselves are drawn, not chosen. Each block independently takes
   M_b = m_b + r_b,
   \label{eq:bounds}
 \end{equation}
-uniformly over the two grids --- 100 values each, so $10^4$ possible blocks.
+uniformly over the two grids, 100 values each, so $10^4$ possible blocks.
 Both grids span two orders of magnitude, and two properties of them do real work:
 
 \begin{itemize}[nosep,leftmargin=1.4em]
@@ -153,8 +153,8 @@ with $m_b$ and $r_b$ that block's floor and width from~\eqref{eq:bounds}. What a
 bot finished the previous block with does \emph{not} carry over.
 
 Capital is anchored to the floor and scaled by the \emph{width}, not by $M_b$.
-That is what keeps $\kappa$ meaning one thing --- ``how many block-widths of
-headroom I start with'' --- across blocks that look nothing like each other.
+That is what keeps $\kappa$ meaning one thing, ``how many block-widths of
+headroom I start with'', across blocks that look nothing like each other.
 Scaling by $M_b$ instead would hand every bot roughly the same bankroll relative
 to the spread of values in a narrow block like $[1000, 1100]$, which is the one
 quantity the capital draw exists to vary.
@@ -184,20 +184,20 @@ in exactly the way Section~\ref{sec:survival} describes.
 With $X = X_t$ and $b_1 \ge b_2 \ge \dots$ the sorted bids of the round:
 
 \begin{description}[leftmargin=2.2em,style=nextline]
-\item[Variation 1 — private value, first price]
+\item[Variation 1, private value, first price]
   The winner takes $x_i - b_1$, using \emph{the winner's own} value; everyone
   else zero.
-\item[Variation 2 — common value, first price]
+\item[Variation 2, common value, first price]
   The winner takes $X - b_1$; everyone else zero.
 \ifreleased
-\item[Variation 3 — runner-up penalty]
+\item[Variation 3, runner-up penalty]
   \[
     \pi^{(1)} = X - b_1, \qquad
     \pi^{(2)} = -\tfrac12 \max\!\left(X - b_1,\; 0\right),
   \]
   and zero for everyone else. When the winner overpays the runner-up pays
   nothing: the penalty never becomes a reward for the winner's loss.
-\item[Variation 4 — funded second price]
+\item[Variation 4, funded second price]
   If $b_1 \le X$,
   \[
     \pi^{(1)} = X - b_2, \qquad \pi^{(2)} = X - b_1, \qquad
@@ -207,8 +207,8 @@ With $X = X_t$ and $b_1 \ge b_2 \ge \dots$ the sorted bids of the round:
   with $w_3 = 0.5$, $w_4 = 0.3$, $w_5 = 0.2$ and $F = \{3,4,5\} \cap \{1,\dots,n_t\}$.
   The renormalisation is what keeps the round \emph{exactly zero-sum} when fewer
   than five players are active; with $n_t \le 2$ no penalty is collected. If
-  instead $b_1 > X$, rank~1 alone takes $X - b_1$ and nobody else is touched —
-  that branch is not zero-sum, by design.
+  instead $b_1 > X$, rank~1 alone takes $X - b_1$ and nobody else is touched.
+  That branch is not zero-sum, by design.
 \fi
 \end{description}
 
@@ -228,7 +228,7 @@ need distinct ranks, so ties there are broken uniformly at random.\fi
 \section{The ranking quantity}
 \label{sec:score}
 
-\subsection{Step 1 --- normalised block profit \texorpdfstring{$\pi$}{pi}}
+\subsection{Step 1, normalised block profit \texorpdfstring{$\pi$}{pi}}
 \label{sec:pi}
 Raw profit is not comparable across blocks: a block with $M_b = 500$ pays out
 roughly fifty times one with $M_b = 10$, and inside a single block bots start
@@ -249,7 +249,7 @@ by~\eqref{eq:capital} is at worst about $-2.5$.
 Everything downstream is relative. $\pi_{i,b} > 0$ means the strategy made money
 that block; $\pi_{i,b} < 0$ means it lost money, however well it placed.
 
-\subsection{Step 2 --- standardisation within the group}
+\subsection{Step 2, standardisation within the group}
 \label{sec:points}
 Let $\mathcal{G}$ be the group that played block $b$ together, $|\mathcal{G}| = N$.
 Write
@@ -258,7 +258,7 @@ Write
   \qquad
   \sigma_b = \sqrt{\frac{1}{N}\sum_{j \in \mathcal{G}} (\pi_{j,b} - \mu_b)^2}
 \end{equation}
-(the \emph{population} standard deviation --- \code{statistics.pstdev} --- not
+(the \emph{population} standard deviation, \code{statistics.pstdev}, not
 the sample one; the twenty bots are the whole population of that block, not a
 sample from it). Then
 \begin{equation}
@@ -269,8 +269,8 @@ sample from it). Then
 \end{equation}
 so $P_{i,b} \in [5, 95]$, centred on $50$.
 
-Two edge cases are defined explicitly. If $\sigma_b = 0$ --- every bot in the
-group scored identically --- then $z_{i,b} := 0$ and everyone gets $50$; nobody
+Two edge cases are defined explicitly. If $\sigma_b = 0$, every bot in the
+group scored identically, then $z_{i,b} := 0$ and everyone gets $50$; nobody
 is separated by a block that separated nobody. If the group has a single member,
 that member gets $50$.
 
@@ -279,7 +279,7 @@ happened to draw a large $\kappa$ and win a run of rounds could contribute
 several hundred points and decide the competition on variance rather than skill.
 Clipping caps any one block's contribution at $95$ and floors it at $5$.
 
-\subsection{Step 3 --- iteration score and total score}
+\subsection{Step 3, iteration score and total score}
 \begin{equation}
   S^{\text{iter}}_{i} = \sum_{b=1}^{B} P_{i,b},
   \qquad
@@ -306,10 +306,10 @@ whole showdown ($|\mathcal{B}_i| = $ \code{blocks}) and $\mathcal{G}_i$ the set
 of games ($|\mathcal{G}_i| = $ \code{games}). All of these are computed in
 \code{harness/evaluate.py:aggregate}.
 
-\subsection{\code{score} --- Total score}
+\subsection{\code{score}, Total score}
 Equation~\eqref{eq:score}. Higher is better. This is what the board sorts on.
 
-\subsection{\code{mean\_block\_points} --- Mean block score}
+\subsection{\code{mean\_block\_points}, Mean block score}
 \begin{equation}
   \overline{P}_i = \frac{1}{|\mathcal{B}_i|} \sum_{b \in \mathcal{B}_i} P_{i,b}
   \;\in\; [5, 95]
@@ -319,7 +319,7 @@ and it is the honest number to quote when two bots played different numbers of
 games. Read it against $50$: above means the bot beat its group's average block,
 below means it did not.
 
-\subsection{\code{mean\_normalised\_profit} --- Mean \texorpdfstring{$\pi$}{pi}}
+\subsection{\code{mean\_normalised\_profit}, Mean \texorpdfstring{$\pi$}{pi}}
 \label{sec:meanpi}
 \begin{equation}
   \boxed{\;
@@ -329,7 +329,7 @@ below means it did not.
 \textbf{The absolute-profitability check.} Standardisation makes $P$ a purely
 relative statement: in a group where every bot loses money, somebody still
 scores $95$. $\overline{\pi}$ is the answer to ``but did it actually make
-money?''\ --- expressed in units of $M_b$, so $\overline{\pi} = +0.4$ means the
+money?''\, expressed in units of $M_b$, so $\overline{\pi} = +0.4$ means the
 strategy earned, on average, forty percent of the block's maximum value.
 
 A bot can rank first on \code{score} with $\overline{\pi} < 0$. That is not a
@@ -338,7 +338,7 @@ lost. It is, however, exactly the situation a report should notice.\ifreleased{}
 In variations 3 and 4 it is common: those are transfer games, so the group's
 total $\pi$ cannot be positive in the branch where the winner did not overpay.\fi
 
-\subsection{\code{normalised\_profit\_spread} --- Consistency}
+\subsection{\code{normalised\_profit\_spread}, Consistency}
 \label{sec:consistency}
 \begin{equation}
   \boxed{\;
@@ -360,7 +360,7 @@ to one regime and is being carried by the blocks that happen to match it.
 The four blocks in an iteration differ deliberately in both scale and width, so
 $s_i$ measures robustness to the regime change, not just round-to-round noise.
 
-\subsection{\code{worst\_normalised\_profit} --- Worst block \texorpdfstring{$\pi$}{pi}}
+\subsection{\code{worst\_normalised\_profit}, Worst block \texorpdfstring{$\pi$}{pi}}
 \begin{equation}
   \pi^{\min}_i = \min_{b \in \mathcal{B}_i} \pi_{i,b}
 \end{equation}
@@ -370,7 +370,7 @@ $\pi^{\min}$ approaches $-C^{\text{start}}_{i,b}/M_b$
 (Section~\ref{sec:capital}) lost its entire starting capital in some block,
 which is the same statement as \code{survival\_rate} $< 1$.
 
-\subsection{\code{survival\_rate} --- Survival}
+\subsection{\code{survival\_rate}, Survival}
 \label{sec:survival}
 \begin{equation}
   \boxed{\;
@@ -380,7 +380,7 @@ which is the same statement as \code{survival\_rate} $< 1$.
 \end{equation}
 The fraction of blocks the bot finished solvent; $1$ when it never went broke.
 A block counts as survived when $C^{\text{end}}_{i,b} > 0$ at the block's last
-round --- equivalently, when the bot was never eliminated during it.
+round, equivalently, when the bot was never eliminated during it.
 
 Survival is a \emph{diagnostic, not a penalty term}: it appears nowhere
 in~\eqref{eq:score}. It does not need to. Going bankrupt forfeits the remainder
@@ -390,7 +390,7 @@ The scoring penalises bankruptcy through $\pi$; $\rho_i$ just tells you it
 happened, and how often.
 
 Read $\rho_i$ together with $\overline{\pi}_i$. A bot with $\overline{\pi} > 0$
-and $\rho < 1$ is one that funds good blocks with catastrophic ones --- the
+and $\rho < 1$ is one that funds good blocks with catastrophic ones, the
 profile most likely to collapse when the hidden bounds change to ones it has
 never seen.
 
@@ -441,7 +441,7 @@ money.\fi
 \subsection{Disqualification}
 \code{disqualified} is set by the sandbox, not by the scoring: a policy
 violation, a memory kill, or repeated failure to return. A disqualified bot
-keeps its computed row --- the numbers stay visible --- but always sorts last,
+keeps its computed row, the numbers stay visible, but always sorts last,
 below every bot that finished legally.
 
 % =====================================================================
@@ -457,7 +457,7 @@ ascending. In words:
 \begin{enumerate}[nosep]
   \item every legal bot outranks every disqualified one;
   \item then by total score, highest first;
-  \item ties broken by mean block score, highest first --- which is what stops a
+  \item ties broken by mean block score, highest first, which is what stops a
         bot that played fewer games from being punished for the scheduler's
         arithmetic rather than its own play.
 \end{enumerate}
@@ -469,7 +469,7 @@ bot entered in another, because $\pi$ is standardised against a different field.
 \section{The tournament}
 \label{sec:tournament}
 
-A single 20-bot arrangement is far too noisy to rank on --- who you are grouped
+A single 20-bot arrangement is far too noisy to rank on, who you are grouped
 with matters as much as how you play.\ifreleased{} In variations 3 and 4, where
 payoffs move between players rather than being created by the auction, it matters
 more still.\fi{} So each variation is played over several iterations.
@@ -524,21 +524,23 @@ qualification total.
 \paragraph{How this maps onto a run.}
 \code{grouping} is set \emph{per iteration}, so the table above is one run:
 \code{["random", "random", "balanced", "finals", "finals"]}. Iterations play in
-order, and each one seeds on the standing after the ones before it --- a
+order, and each one seeds on the standing after the ones before it, a
 balanced iteration snake-seeds on iterations 1--2's points, and a finals
 iteration cuts the field on everything above it. A run whose iterations are all
 \code{random} needs no standing at all and does not consult one.
 
-A schedule shorter than \code{iterations} \emph{holds its last entry} rather
-than cycling. That is what the default, \code{["random", "balanced"]}, relies
-on: iteration 1 draws groups blind because there is nothing to seed on yet, and
-every iteration after it is strength-balanced on the standing so far, however
-many there are. So the tournament runs in full on \emph{every} showdown ---
-practice, mock and final alike --- rather than only when someone remembers to
-set it up.
+The default \emph{is} that table:
+\code{["random", "random", "balanced", "finals", "finals"]}. A showdown is the
+whole tournament, so it plays in full on every one, practice, mock and final
+alike, rather than only when someone remembers to set it up. A schedule shorter
+than \code{iterations} holds its last entry rather than cycling.
 
-Where a run needs a standing it did not produce itself --- the first balanced
-iteration of a fresh board --- it takes the last finished showdown \emph{of its
+A showdown may also be played for one variation at a time. The live board takes
+each variation from the newest run that scored it, so replaying one leaves the
+others exactly as they were.
+
+Where a run needs a standing it did not produce itself, the first balanced
+iteration of a fresh board, it takes the last finished showdown \emph{of its
 own kind} (Section~\ref{sec:mock}), never whichever board happened to finish
 most recently.
 
@@ -548,7 +550,7 @@ most recently.
 
 Two mock showdowns run before the deadline. They use \emph{the same engine, the
 same sandbox, the same scoring, the same aggregation and the same tournament
-structure} as the graded run --- there is no separate code path, and a mock is
+structure} as the graded run, there is no separate code path, and a mock is
 not a reduced format. It plays the full sequence: iteration 1 on blind groups,
 every iteration after it strength-balanced on the standing so far. They differ
 only in size, in what is done with the result, and in one recorded fact: every
@@ -584,7 +586,7 @@ Variations   & 1, 2            & \ifreleased 1, 2, 3, 4\else all released\fi
 Submissions  & optional        & optional          & required \\
 Grouping     & \multicolumn{3}{l}{the full tournament: iteration 1 random, the rest seeded} \\
 Iterations   & reduced         & reduced           & 3 qualification $+$ 2 finals \\
-Bounds       & \multicolumn{3}{l}{drawn from the run's own seed --- never reused} \\
+Bounds       & \multicolumn{3}{l}{drawn from the run's own seed, never reused} \\
 Counts towards the result & no & no                & yes \\
 Also does    & \multicolumn{2}{l}{releases variations 3 and 4 (mock 1)} & \\
 \bottomrule
@@ -604,7 +606,7 @@ Four things follow, and they are the whole point of running them.
   every run draws its own blocks from~\eqref{eq:bounds}, off a seed that is not
   published until afterwards. There are $10^4$ possible blocks and no schedule is
   ever reused, so a bot tuned to the $\pi$ it earned in a mock is tuned to a
-  distribution that will not appear again --- the same trap the local runner
+  distribution that will not appear again, the same trap the local runner
   warns about, one level up. This is why the bounds are no longer the
   competition's principal secret: the seed is.
 
@@ -621,8 +623,8 @@ Four things follow, and they are the whole point of running them.
   necessarily has fewer entrants and less-developed bots than the final one.
   Read a mock 2 rank in a late-released variation with that in mind: the
   standardisation in~\eqref{eq:points} is against \emph{that} field, and a thin
-  field of under-tuned bots makes $\sigma_b$ small and $z$ --- and so the whole
-  board --- unusually sensitive.
+  field of under-tuned bots makes $\sigma_b$ small and $z$, and so the whole
+  board, unusually sensitive.
 \end{enumerate}
 
 \noindent

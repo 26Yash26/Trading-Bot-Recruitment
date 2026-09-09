@@ -21,20 +21,20 @@ Thumbs.db
 .env
 *.env
 !*.env.example
-# Google OAuth client downloads — the real one lives outside the repo; this makes
+# Google OAuth client downloads, the real one lives outside the repo; this makes
 # sure a stray copy dropped in here can never be committed.
 client_secret*.json
 *_client_secret*.json
 
-# Real hidden competition config — never commit (see secret/README.md).
+# Real hidden competition config, never commit (see secret/README.md).
 # The template `secret/config.example.py` IS committed.
 secret/config.py
 
-# Local server state: SQLite database + uploaded bot files. Never deployed —
-# on the VM this lives in /var/lib/quantguild instead (see server/config.py).
+# Local server state: SQLite database + uploaded bot files. Never deployed.
+# On the VM this lives in /var/lib/quantguild instead (see server/config.py).
 .local/
 
-# LaTeX build artefacts. `docs/scoring.pdf` IS committed — the doc should be
+# LaTeX build artefacts. `docs/scoring.pdf` IS committed, the doc should be
 # readable from a checkout without a TeX install; everything else regenerates.
 *.aux
 *.out

@@ -1,8 +1,8 @@
 # Trading-Bot-Recruitment
 
-Infrastructure for the Quant Guild Trading Bot competition — odd semester 2026.
+Infrastructure for the Quant Guild Trading Bot competition, odd semester 2026.
 
-**Live:** <https://quantguildiitm.in> — deployed on the GCP VM behind nginx + TLS,
+**Live:** <https://quantguildiitm.in>, deployed on the GCP VM behind nginx and TLS,
 `@smail.iitm.ac.in` Google sign-in, `bwrap` sandbox, showdown every two hours.
 
 Participants submit a Python bot. It is checked in a sandbox on upload, then
@@ -10,7 +10,7 @@ every two hours the whole field replays a 2000-round sealed-bid auction and the
 public leaderboard is rewritten.
 
 > **Do not modify `.github/`.** On every push to `main` the deploy workflow SSHes
-> into the GCP VM and hard-resets `/var/www/html` to `origin/main` — so
+> into the GCP VM and hard-resets `/var/www/html` to `origin/main`, so
 > **anything on `main` is live**. The VM restarts the API itself via a systemd
 > path unit; the workflow does not need to change. See `docs/RUNBOOK.md`.
 
@@ -31,32 +31,32 @@ open the admin console without Google OAuth: [`docs/RUNBOOK.md`](docs/RUNBOOK.md
 
 | Path | Purpose | Web-exposed? |
 |---|---|---|
-| `index.html`, `web/` | the site — hand-written SPA, no build step | **yes** |
+| `index.html`, `web/` | the site: a hand-written SPA, no build step | **yes** |
 | `public/` | downloads: `starter-kit.zip` | **yes** |
-| `server/` | API, Google OAuth, showdown scheduler, SQLite | no — proxied at `/api` |
+| `server/` | API, Google OAuth, showdown scheduler, SQLite | only via `/api` |
 | `sandbox/` | AST policy, per-bot child process, isolation tiers | no |
 | `harness/` | validation, grouped simulation, leaderboard aggregation | no |
-| `src/auction/` | the engine — round loop, distributions, payoff variations | no |
+| `src/auction/` | the engine: round loop, distributions, payoff variations | no |
 | `starter-kit/` | what participants download | no (shipped in the zip) |
-| `secret/` | hidden bounds template — the real config lives in the database | no |
+| `secret/` | hidden bounds template; the real config lives in the database | no |
 | `scripts/` | `seed_demo.py`, `build_css.sh` | no |
 | `deploy/` | nginx config, systemd units, env template | no |
 | `tests/` | 86 tests | no |
 | `docs/` | architecture, security model, runbook, checklist, bot contract | no |
 
 "Web-exposed" is enforced by an allowlist in `deploy/nginx.conf`, not by
-convention — `/var/www/html` is a checkout of this whole repo, so everything
+convention. `/var/www/html` is a checkout of this whole repo, so everything
 else has to be unreachable by construction. See
 [`docs/SECURITY.md`](docs/SECURITY.md) §1.
 
 ## The stack
 
-- **Frontend** — ES modules and Tailwind v4, built by Tailwind's *standalone
+- **Frontend:** ES modules and Tailwind v4, built by Tailwind's *standalone
   binary*. No node, no npm, no `node_modules`, nothing to install on the VM.
   Rebuild with `./scripts/build_css.sh` and commit `web/css/app.css`.
-- **Backend** — FastAPI + SQLite. Sessions are `HttpOnly` cookies; the OAuth
+- **Backend:** FastAPI + SQLite. Sessions are `HttpOnly` cookies; the OAuth
   flow is `state`-protected and restricted to `@smail.iitm.ac.in`.
-- **Sandbox** — one process per bot, per-round timeout enforced by killing it,
+- **Sandbox:** one process per bot, per-round timeout enforced by killing it,
   `setrlimit` ceilings, and namespace isolation via bubblewrap (or Docker).
 
 ## Tests
@@ -71,7 +71,7 @@ bombs, socket openers, filesystem readers, protocol-forging `print`s and
 
 The sandbox is POSIX-only, so on **native Windows** the tests that spawn a bot
 process skip themselves (the AST-policy tests still run). Run the full suite on
-Linux, macOS or WSL. Nothing runs `pytest` in CI yet — do it before you merge.
+Linux, macOS or WSL. Nothing runs `pytest` in CI yet, so do it before you merge.
 
 ## Documentation
 

@@ -1,7 +1,7 @@
 """The showdown: every submitted bot, every enabled variation, ranked.
 
 This is what the 2-hourly scheduler calls, and the same code path the final
-evaluation on 16 Sep uses — only the settings differ. Following the problem
+evaluation on 16 Sep uses, only the settings differ. Following the problem
 statement §8: split into random groups, play a full game per group, repeat with
 fresh seeds and fresh groups, then aggregate.
 
@@ -43,7 +43,7 @@ class ShowdownSettings:
     ``finals_size`` bots and plays them head to head.
 
     It may be a single mode applied to every iteration, or **one mode per
-    iteration** — ``("random", "random", "balanced", "finals", "finals")`` plays
+    iteration**, ``("random", "random", "balanced", "finals", "finals")`` plays
     the whole of §9 in one run, with each iteration seeded on the ones before it
     rather than on whatever board happened to be published last. See
     ``grouping_for_iteration``.
@@ -64,12 +64,12 @@ class ShowdownSettings:
         (0.0, 100.0), (40.0, 60.0), (0.0, 400.0), (5.0, 25.0),
     )
     """Hidden value bounds. Either one schedule of blocks, reused by every
-    iteration, or one schedule per iteration — see ``bounds_for_iteration``."""
+    iteration, or one schedule per iteration, see ``bounds_for_iteration``."""
     bounds_mode: str = "random"
     """How each iteration's hidden bounds are chosen.
 
     ``"random"`` draws them off the published grids
-    (``distributions.draw_block_bounds``) from ``seed`` — the normal case, and
+    (``distributions.draw_block_bounds``) from ``seed``, the normal case, and
     what makes a schedule impossible to carry from one showdown to the next.
     ``"fixed"`` uses ``block_bounds`` verbatim, for reproducing a specific run.
     """
@@ -101,7 +101,7 @@ class ShowdownSettings:
 
         A schedule shorter than ``iterations`` **holds its last entry** rather
         than cycling, which is what the block schedule does. Cycling is right
-        for value bounds — every schedule there is an equally valid fresh draw —
+        for value bounds, every schedule there is an equally valid fresh draw,
         and wrong here: ``("random", "balanced")`` over five iterations should
         mean one random iteration and then four balanced ones, not an
         alternation that keeps throwing the field back into a random draw after
@@ -113,7 +113,7 @@ class ShowdownSettings:
     def bounds_for_iteration(self, iteration: int) -> list[tuple[float, float]]:
         """The block schedule iteration ``iteration`` (0-based) plays.
 
-        Problem statement §9 wants iteration 2 to be a genuinely fresh draw —
+        Problem statement §9 wants iteration 2 to be a genuinely fresh draw,
         "different value distributions", not the same ones under a new seed.
 
         Under ``bounds_mode="random"`` that is automatic: every iteration draws
@@ -149,7 +149,7 @@ class LeaderboardRow:
     ``score`` is the ranking quantity: the sum of its iteration scores, each of
     which is the sum of that iteration's four standardised block scores. The
     figures reported alongside it are the ones the problem statement §8 asks for
-    — absolute profitability, survival, worst block, and consistency.
+, absolute profitability, survival, worst block, and consistency.
     """
 
     key: str
@@ -192,7 +192,7 @@ class ShowdownResult:
 
 
 def _play_one(job: dict) -> list[dict]:
-    """Worker entry point — must be module-level and picklable."""
+    """Worker entry point, must be module-level and picklable."""
     specs = [BotSpec(key=k, path=Path(p)) for k, p in job["specs"]]
     result = play_group(
         specs,
@@ -283,8 +283,8 @@ def build_jobs(
 def seeding_from(outcomes: list[BotOutcome]) -> dict[int, dict[str, float]]:
     """Cumulative score per bot per variation, for the next iteration to seed on.
 
-    This is the same quantity ``aggregate`` reports as ``score`` — the sum of the
-    iteration scores so far — just computed without the rest of the row.
+    This is the same quantity ``aggregate`` reports as ``score``, the sum of the
+    iteration scores so far, just computed without the rest of the row.
     """
     seeding: dict[int, dict[str, float]] = {}
     for outcome in outcomes:
@@ -374,7 +374,7 @@ def run_showdown(
     out across the process pool, which is where all the parallelism was anyway:
     a 100-bot field is five groups per variation per iteration.
 
-    ``seeding`` is the standing the run *starts* from — normally the previous
+    ``seeding`` is the standing the run *starts* from, normally the previous
     published board of the same kind, or nothing at all.
     """
     started = time.time()
@@ -423,7 +423,7 @@ def run_showdown(
 
         # Re-estimate what is left every iteration. A `finals` iteration cuts the
         # field to `finals_size`, so it plays far fewer groups than a plan drawn
-        # before anything had a score — and a progress bar that ends at 5/6 looks
+        # before anything had a score, and a progress bar that ends at 5/6 looks
         # like a run that stopped early.
         total = done + len(jobs) + sum(
             len(build_iteration_jobs(submissions, settings, later, seeding=standing))

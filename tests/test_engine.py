@@ -109,7 +109,7 @@ def test_bankrupt_bot_starts_inactive_and_is_excluded_from_num_players():
         sampler=FixedSampler([[10.0, 10.0]]),  # only 2 active players
     )
     obs_seen = [entry for kind, entry in record if kind == "obs"]
-    assert obs_seen == []  # spy bot was never asked -- it was inactive
+    assert obs_seen == []  # spy bot was never asked, it was inactive
 
 
 def test_bot_is_eliminated_the_round_its_capital_hits_zero():

@@ -34,8 +34,8 @@ submissions into a leaderboard, and a **server** that puts it on the web.
 ## The join that makes this cheap
 
 The engine calls `bot_cls(config)` and then `.get_bid(obs)`. That is the *whole*
-contract, so `sandbox.runner.SandboxedBotFactory` — a callable returning an
-object with `get_bid` — drops into `run_game` with **no engine changes at all**.
+contract, so `sandbox.runner.SandboxedBotFactory`, a callable returning an
+object with `get_bid`, drops into `run_game` with **no engine changes at all**.
 Sandboxing is invisible to the auction logic, and `run_local.py` keeps working
 with plain in-process classes.
 
@@ -48,7 +48,7 @@ exception from a bot into a bid of `0` plus an error count.
 | Module | Job |
 |---|---|
 | `src/auction/config.py` | fixed PS constants |
-| `src/auction/distributions.py` | `ValueSampler` — blocked uniform, hidden bounds, seeded |
+| `src/auction/distributions.py` | `ValueSampler`, blocked uniform, hidden bounds, seeded |
 | `src/auction/variations.py` | V1 / V2 / V3 payoff rules |
 | `src/auction/history.py` | rolling 100-round bid window |
 | `src/auction/player.py` | bot wrapper: bid sanitising, capital, elimination |
@@ -88,7 +88,7 @@ process pool → aggregate per `(roll, variation)` into score, mean/worst/spread
 The kind is not a label. `mock` and `final` boards are archived and stay
 reachable (`GET /api/leaderboard?showdown=<id>`) after the two-hourly practice
 clock has replaced the live one, and a balanced or finals run seeds only on the
-last finished run **of its own kind** — otherwise its snake seeding is built from
+last finished run **of its own kind**, otherwise its snake seeding is built from
 whichever practice run happened to land most recently. `docs/scoring.tex` §7-8
 is the normative description.
 
@@ -106,7 +106,7 @@ also what keeps the document root safe (see `docs/SECURITY.md`).
 ## Deployment
 
 GitHub Actions hard-resets `/var/www/html` to `origin/main`. That updates files
-but restarts nothing, and `.github/` is off limits by repo policy — so the VM
+but restarts nothing, and `.github/` is off limits by repo policy, so the VM
 watches for the deploy itself: `quantguild-deploy.path` triggers on
 `.git/FETCH_HEAD` changing and restarts the API. See `docs/RUNBOOK.md`.
 

@@ -30,7 +30,7 @@ def run_bot(tmp_path):
     """Run one source string in the sandbox and return (bid, error, handle)."""
     if sys.platform == "win32":
         # The sandbox child talks to its parent over a subprocess pipe read with
-        # select() and killed with process groups -- both POSIX-only. The sandbox
+        # select() and killed with process groups, both POSIX-only. The sandbox
         # only ever runs on Linux (CI + the VM); the AST-policy tests below still
         # run here.
         pytest.skip("sandbox child-process IPC is POSIX-only")
@@ -279,14 +279,14 @@ def test_policy_rejects_escape_attempts(source, fragment):
 @pytest.mark.parametrize(
     "source, fragment",
     [
-        # __builtins__ is an implicit BARE global in every module — no import,
+        # __builtins__ is an implicit BARE global in every module, no import,
         # no attribute access. Confirmed (before this test existed) to load the
         # real eval() through exactly the mechanism sandbox/child.py uses to
         # load a submission, with zero violations from check_source():
         #   __builtins__["eval"]("__import__('os').getcwd()")
-        # Attribute access (`__builtins__.eval`) actually fails on its own —
+        # Attribute access (`__builtins__.eval`) actually fails on its own.
         # CPython hands a non-__main__ module a *dict* for __builtins__, not
-        # the module — but subscript access doesn't, and this file inspects no
+        # the module, but subscript access doesn't, and this file inspects no
         # ast.Subscript node at all, so the dict path was wide open.
         (
             "class Bot:\n"
@@ -295,7 +295,7 @@ def test_policy_rejects_escape_attempts(source, fragment):
             "__builtins__",
         ),
         # __loader__ / __spec__ carry the module's loader, whose get_data(path)
-        # reads an arbitrary file — same "implicit bare global" shape as above.
+        # reads an arbitrary file, same "implicit bare global" shape as above.
         (
             "class Bot:\n"
             "    def get_bid(self, o):\n"
@@ -309,7 +309,7 @@ def test_policy_rejects_escape_attempts(source, fragment):
             "__spec__",
         ),
         # A banned name doesn't stop being dangerous when it's `.eval` on some
-        # other allowed object instead of bare `eval` — only the dunder-shape
+        # other allowed object instead of bare `eval`, only the dunder-shape
         # rule applied to attribute access before this, so `.eval`/`.open`/...
         # were unchecked as long as they weren't spelled with underscores.
         (
@@ -325,7 +325,7 @@ def test_policy_rejects_escape_attempts(source, fragment):
             "open",
         ),
         # The classic sandbox-jail escape: the dotted attribute path lives
-        # inside a string literal, so it is never an ast.Attribute node — this
+        # inside a string literal, so it is never an ast.Attribute node, this
         # entire family (str.format, str.format_map, string.Formatter.vformat)
         # is invisible to every other check in this file.
         (
@@ -347,7 +347,7 @@ def test_policy_rejects_escape_attempts(source, fragment):
 def test_policy_rejects_the_builtins_dict_and_format_string_escapes(source, fragment):
     """Regression: every one of these passed check_source() with zero
     violations and reached real code execution when loaded the way
-    sandbox/child.py loads a submission — found while red-teaming the sandbox
+    sandbox/child.py loads a submission, found while red-teaming the sandbox
     ahead of the recruitment auction going live, fixed the same day."""
     violations = check_source(source)
     assert violations, f"expected {fragment!r} to be rejected"

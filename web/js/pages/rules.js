@@ -1,8 +1,8 @@
 // The problem statement, rendered as a document rather than a PDF nobody opens.
 //
 // Everything here tracks the competition PDF section for section. Where a number
-// is an admin setting — rounds, block size, group size, iterations, the capital
-// draw — it is read from `/api/state` rather than typed in, so the page cannot
+// is an admin setting, rounds, block size, group size, iterations, the capital
+// draw, it is read from `/api/state` rather than typed in, so the page cannot
 // drift from the engine that scores people.
 
 import { store } from "../main.js";
@@ -55,7 +55,7 @@ const SECTIONS = [
 // Problem statement §5. A tick means that variation's bot receives it.
 const OBSERVATIONS = [
   ["Your own value xᵢ this round", "x", [1, 2, 3, 4]],
-  ["Your current capital cᵢ — your maximum legal bid", "capital", [1, 2, 3, 4]],
+  ["Your current capital cᵢ, which is your maximum legal bid", "capital", [1, 2, 3, 4]],
   ["Number of active players nₜ", "num_players", [1, 2, 3, 4]],
   ["Round index t", "round", [1, 2, 3, 4]],
   ["Highest bid b₁ of the previous round", "highest_bid_last_round", [1, 2, 3, 4]],
@@ -162,7 +162,7 @@ export async function renderRules(app) {
     const capital = state.capital || { kappa_lo: 0.5, kappa_hi: 2.5 };
     const filenames = variations.length
       ? variations.map((id) => `ROLLNO_${id}.py`).join(", ")
-      : "—";
+      : "-";
     const formUrl = (state.submission_form_url || "").trim();
 
     app.innerHTML = `
@@ -172,7 +172,7 @@ export async function renderRules(app) {
         <p class="lede mt-10 max-w-2xl" data-fade>
           Every participant writes a bot that plays a repeated sealed-bid auction. The highest bid
           wins the round; what winning is <i>worth</i> is what separates the variations. Below is
-          everything the engine actually does — nothing is held back except the distribution itself.
+          everything the engine actually does. Nothing is held back except the distribution itself.
         </p>
 
         <div class="mt-8 flex flex-wrap gap-2" data-fade>
@@ -216,8 +216,8 @@ export async function renderRules(app) {
                   anybody else's.</li>
               <li><b class="text-ink">Hidden regimes.</b> For block b, xᵢ ~ U[m<sub>b</sub>,
                   M<sub>b</sub>], and both bounds are hidden and different for every block. Neither
-                  the bounds nor the fact that a boundary has been crossed is ever announced —
-                  detecting the regime shift is part of the problem.</li>
+                  the bounds nor the fact that a boundary has been crossed is ever announced.
+                  Detecting the regime shift is part of the problem.</li>
               <li><b class="text-ink">Maximum bid.</b> Your current capital. A bid larger than that is
                   illegal.</li>
               <li><b class="text-ink">Starting capital.</b> Redrawn at the start of every block, and
@@ -233,11 +233,11 @@ export async function renderRules(app) {
             </p>
             <div class="panel mt-6 p-6 font-mono text-sm leading-relaxed md:p-8" data-fade>
               <p>m<sub>b</sub> ~ {10, 20, 30, … 1000}
-                <span class="text-ink-3">— the block's hidden minimum, in steps of 10</span></p>
+                <span class="text-ink-3">the block's hidden minimum, in steps of 10</span></p>
               <p class="mt-2">range<sub>b</sub> ~ {100, 200, 300, … 10000}
-                <span class="text-ink-3">— its width, in steps of 100</span></p>
+                <span class="text-ink-3">its width, in steps of 100</span></p>
               <p class="mt-2">M<sub>b</sub> = m<sub>b</sub> + range<sub>b</sub>
-                <span class="text-ink-3">— so xᵢ ~ U[m<sub>b</sub>, M<sub>b</sub>]</span></p>
+                <span class="text-ink-3">so xᵢ ~ U[m<sub>b</sub>, M<sub>b</sub>]</span></p>
               <p class="mt-4">κᵢ ~ U[${esc(capital.kappa_lo)}, ${esc(capital.kappa_hi)}]</p>
               <p class="mt-2 text-flame">C⁽ᵇ'⁰⁾ᵢ = m<sub>b</sub> + range<sub>b</sub> · κᵢ</p>
             </div>
@@ -245,12 +245,12 @@ export async function renderRules(app) {
               Both grids hold 100 values, so there are <b class="text-ink">10,000</b> possible blocks
               and they span two orders of magnitude in <em>both</em> the floor and the width. The
               minimum is not zero, and a block as narrow as [1000, 1100] is as likely as one as wide
-              as [10, 10010] — a bot that assumes values start at zero, or that they are "about a
+              as [10, 10010], a bot that assumes values start at zero, or that they are "about a
               hundred", is being measured on exactly that assumption.
             </p>
             <p class="mt-4 max-w-2xl text-sm leading-relaxed text-ink-2" data-fade>
               Capital scales with the <em>width</em>, not the maximum, so κ always means the same
-              thing: how many block-widths of headroom you start with. Nothing is announced — not
+              thing: how many block-widths of headroom you start with. Nothing is announced, not
               m<sub>b</sub>, not the range, not when a block changes.
             </p>
             <div class="mt-8 grid gap-px bg-line md:grid-cols-2" data-fade>
@@ -291,8 +291,8 @@ export async function renderRules(app) {
               <li><b class="text-ink">4.</b> new capital = old capital + payoff.</li>
               <li><b class="text-ink">5.</b> A bot whose capital hits zero stops participating for the
                   rest of that block.</li>
-              <li><b class="text-ink">6.</b> An illegal bid — above your capital, below zero, NaN, or
-                  not returned in time — is automatically set to 0 for that round.</li>
+              <li><b class="text-ink">6.</b> An illegal bid (above your capital, below zero, NaN,
+                  or not returned in time) is automatically set to 0 for that round.</li>
               <li><b class="text-ink">7.</b> In variations 2, 3 and 4, X is the maximum xᵢ over the
                   players <b class="text-ink">active in that round</b>. Bankrupt bots contribute no
                   value, which is why the active count matters: it is the sample size behind X.</li>
@@ -318,14 +318,14 @@ export async function renderRules(app) {
               ${table(
                 ["Observation", "Key", ...variations.map((id) => `V${id}`)],
                 [...OBSERVATIONS, ...lateObservations()]
-                  .filter(([, , ids]) => ids.some((id) => variations.includes(id)))
+                  .filter(([,, ids]) => ids.some((id) => variations.includes(id)))
                   .map(([label, key, ids]) => [
                     dim(label),
                     mono(key),
                     ...variations.map((id) =>
                       ids.includes(id)
                         ? '<span class="text-jade">✓</span>'
-                        : '<span class="text-ink-3">—</span>'
+                        : '<span class="text-ink-3">-</span>'
                     ),
                   ]),
                 { align: [null, null, ...variations.map(() => "right")] }
@@ -337,11 +337,11 @@ export async function renderRules(app) {
               <li class="flex gap-3"><span class="text-flame">▸</span><span>You are never told other
                   players' values, capitals or identities.</span></li>
               <li class="flex gap-3"><span class="text-flame">▸</span><span>In variations 2 to 4 the
-                  previous round's realised X is published to everyone — the winner already knows it
+                  previous round's realised X is published to everyone: the winner already knows it
                   from their payoff, so publishing it keeps the information set symmetric.</span></li>
               <li class="flex gap-3"><span class="text-flame">▸</span><span>Your bot may keep internal
                   state across rounds, and it is <b class="text-ink">not</b> cleared at a block
-                  boundary — which is exactly what lets you detect one.</span></li>
+                  boundary, which is exactly what lets you detect one.</span></li>
             </ul>
           </div>
 
@@ -374,7 +374,7 @@ export async function renderRules(app) {
             </p>
             <div class="mt-8 grid gap-px bg-line md:grid-cols-2" data-fade>
               <div class="bg-void p-6 md:p-8">
-                <p class="label">Step 1 — scale</p>
+                <p class="label">Step 1: scale</p>
                 <p class="mt-5 font-mono text-sm text-flame">
                   π⁽ᵇ⁾ᵢ = ( C⁽ᵇ'ᵉⁿᵈ⁾ᵢ − C⁽ᵇ'⁰⁾ᵢ ) / M<sub>b</sub>
                 </p>
@@ -384,7 +384,7 @@ export async function renderRules(app) {
                 </p>
               </div>
               <div class="bg-void p-6 md:p-8">
-                <p class="label">Step 2 — standardise</p>
+                <p class="label">Step 2: standardise</p>
                 <p class="mt-5 font-mono text-sm text-flame">
                   z = clip( (π − μ<sub>b</sub>) / σ<sub>b</sub>, −3, 3 )<br>
                   P = 50 + 15 z ∈ [5, 95]
@@ -419,7 +419,7 @@ export async function renderRules(app) {
           <div data-reveal>
             ${heading("tournament", "07", "Tournament structure")}
             <p class="mt-8 max-w-2xl text-sm leading-relaxed text-ink-2" data-fade>
-              A single 20-bot arrangement is far too noisy to rank on — who you are grouped with
+              A single 20-bot arrangement is far too noisy to rank on, who you are grouped with
               matters as much as how you play, particularly in variations 3 and 4 where payoffs are
               transfers between players. Each variation is therefore run over several iterations with
               different random seeds, and the seeds are published afterwards so results are
@@ -432,12 +432,12 @@ export async function renderRules(app) {
                   [mono("1"), dim("random"), dim("All qualifying bots shuffled into groups of 20 with seed S₁.")],
                   [mono("2"), dim("random, fresh seed"), dim("Reshuffled independently: different distributions, capitals and opponents.")],
                   [mono("3"), dim("strength-balanced"), dim("Sorted by cumulative points and dealt in a snake, so every group is roughly equal in average strength.")],
-                  [mono("4 – 5"), dim("finals"), dim("The top 20 by cumulative score play two head-to-head iterations on fresh seeds.")],
+                  [mono("4 to 5"), dim("finals"), dim("The top 20 by cumulative score play two head-to-head iterations on fresh seeds.")],
                 ]
               )}
             </div>
             <p class="mt-6 text-sm leading-relaxed text-ink-2" data-fade>
-              That is 12 scored blocks in qualification and 8 in the finals — enough for the standard
+              That is 12 scored blocks in qualification and 8 in the finals, enough for the standard
               error of a bot's mean block score to fall well below the gaps that matter. Final ranking
               is the sum of the two finals iterations, tie-broken by the qualification total. Mock
               auctions run the same machinery at reduced size, with per-block statistics published so
@@ -489,7 +489,7 @@ export async function renderRules(app) {
         return min(0.5 * obs["x"], obs["capital"])</code></pre>
             <div class="mt-8 grid gap-px bg-line sm:grid-cols-2" data-fade>
               ${[
-                ["Under 1 second per round", "Exceed it and the round is scored as a bid of 0 — and your bot may be removed from the auction."],
+                ["Under 1 second per round", "Exceed it and the round is scored as a bid of 0, and your bot may be removed from the auction."],
                 ["Under 100 MB of memory", "A bot seen hogging memory is discarded from the auction."],
                 ["No files, processes or network", "And no inspecting the simulator's internal state. Any bot doing so is disqualified."],
                 ["Any pip library you like", "numpy, pandas, scipy and scikit-learn are available. List whatever you use in your report."],
@@ -512,7 +512,7 @@ export async function renderRules(app) {
               <code class="font-mono text-flame">ROLLNO_&lt;variation&gt;.py</code>. With what is in
               play right now that means <code class="font-mono text-flame">${esc(filenames)}</code>.
               The roll number must match the one on your smail account. Upload it here and it is
-              checked immediately — static policy first, then a short game against the sample bots —
+              checked immediately, static policy first, then a short game against the sample bots,
               and either accepted or sent back with a reason. Resubmit as often as you like: the
               newest accepted file per variation is the one that plays.
             </p>
@@ -543,7 +543,7 @@ export async function renderRules(app) {
                   profit by itself is not a metric.</b> It is read alongside how the strategy adapts
                   to different conditions.</span></li>
               <li class="flex gap-3"><span class="text-flame">▸</span><span>Robustness against
-                  different starting capitals — whether aggression genuinely responds to the bankroll
+                  different starting capitals, whether aggression genuinely responds to the bankroll
                   rather than being fixed.</span></li>
               <li class="flex gap-3"><span class="text-flame">▸</span><span>Robustness across blocks:
                   consistency of π across the four differently-scaled regimes, and how quickly the bot
@@ -551,7 +551,7 @@ export async function renderRules(app) {
               <li class="flex gap-3"><span class="text-flame">▸</span><span>Survival. Bankruptcies are
                   heavily penalised, since a bankrupt bot forfeits the rest of its block.</span></li>
               <li class="flex gap-3"><span class="text-flame">▸</span><span>Use AI as much as you like
-                  — we are testing the logic behind your strategy, not your typing. Indent properly
+, we are testing the logic behind your strategy, not your typing. Indent properly
                   and comment where it helps us read it.</span></li>
             </ul>
 

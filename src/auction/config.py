@@ -36,7 +36,7 @@ MAX_BID = None
 §3. The engine still accepts a fixed number so its unit tests can pin payoff
 arithmetic without depending on a capital draw."""
 
-# --- Engine behaviour (our decisions — keep in sync with docs/bot_interface.md) -
+# --- Engine behaviour (our decisions, keep in sync with docs/bot_interface.md) -
 
 ELIMINATION_CAPITAL = 0.0
 """A bot with capital <= ELIMINATION_CAPITAL sits out the rest of its BLOCK.

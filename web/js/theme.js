@@ -35,7 +35,7 @@
       try {
         localStorage.setItem(KEY, theme);
       } catch (error) {
-        /* nothing to do — the theme still applies for this page load */
+        /* nothing to do, the theme still applies for this page load */
       }
       document.dispatchEvent(new CustomEvent("qg:theme", { detail: theme }));
     },

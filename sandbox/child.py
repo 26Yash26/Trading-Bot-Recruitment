@@ -15,7 +15,7 @@ does is dup the real stdout to a private fd and point fd 1 at /dev/null, so a
 participant's ``print()`` cannot corrupt or spoof a protocol frame.
 
 Everything here is a backstop *inside* the process. The real confinement is the
-namespace/container the runner starts us in — see ``sandbox/runner.py``.
+namespace/container the runner starts us in, see ``sandbox/runner.py``.
 """
 
 from __future__ import annotations

@@ -99,7 +99,7 @@ def seed(count: int, seed_value: int = 7) -> None:
         store.upsert_user(email, name, roll)
 
         for variation in (1, 2, 3):
-            # Not everyone enters every variation — that is allowed by the PS.
+            # Not everyone enters every variation, that is allowed by the PS.
             if variation != 1 and rng.random() < 0.3:
                 continue
 

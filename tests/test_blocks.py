@@ -1,7 +1,7 @@
 """Block boundaries and scoring (problem statement §3.1 and §8).
 
 The two rules that make this competition what it is: capital does not carry
-across a block, and raw profit is never compared directly — it is normalised by
+across a block, and raw profit is never compared directly, it is normalised by
 the block's hidden maximum and then standardised inside the group.
 """
 
@@ -96,7 +96,7 @@ def test_capital_is_the_floor_plus_kappa_block_widths():
 
     kappa means "how many block-widths of headroom I start with", and that
     meaning has to hold whatever the block looks like. Two blocks can share a
-    maximum of 1100 and be completely different games — [1000, 1100], where
+    maximum of 1100 and be completely different games, [1000, 1100], where
     every value sits within 10% of every other, against [10, 1100], which spans
     two orders of magnitude. Scaling capital by M_b would hand out the same
     bankroll in both; scaling by the width does not.
@@ -162,7 +162,7 @@ def test_capital_is_redrawn_at_a_block_boundary_and_does_not_carry_over():
 
 
 def all_in_bot():
-    """Bids its entire capital every round — wins, and overpays, every time."""
+    """Bids its entire capital every round, wins, and overpays, every time."""
 
     class _Bot:
         def __init__(self, config):
@@ -283,7 +283,7 @@ def test_variation_four_is_told_the_top_five_bids():
 
 
 def test_a_bid_above_capital_is_filed_as_zero_with_no_fixed_ceiling():
-    """There is no max_bid any more — your capital is the ceiling (§3)."""
+    """There is no max_bid any more, your capital is the ceiling (§3)."""
     result = run_game(
         [fixed_bid_bot(10_000), fixed_bid_bot(1)],
         variation=1,

@@ -1,14 +1,14 @@
 """The front end has no build step, so nothing else catches a broken module.
 
 `deploy/nginx-app.conf` spells out the failure mode: ES modules resolve their
-imports *before* executing anything, so one module that fails to parse — or one
-`import { thing }` naming an export that does not exist — discards the whole
+imports *before* executing anything, so one module that fails to parse, or one
+`import { thing }` naming an export that does not exist, discards the whole
 graph. The page renders the static footer and nothing else, with no error unless
 devtools is open. There is no bundler, no linter and no CI here to notice.
 
 So two cheap structural checks, run on every served module:
 
-  1. delimiters balance — the realistic way a hand-edited template literal breaks;
+  1. delimiters balance, the realistic way a hand-edited template literal breaks;
   2. every named import resolves to a real export in the module it names.
 
 Neither is a parser. Both catch the mistakes that actually happen when editing
@@ -40,7 +40,7 @@ BEFORE_REGEX = set("(,=:[!&|?{};+-*%~^") | {""}
 def check_delimiters(source: str, name: str) -> None:
     """Walk `source`, skipping strings and comments, and match every delimiter.
 
-    Template literals are walked into, because `${...}` holds real code — and
+    Template literals are walked into, because `${...}` holds real code, and
     code inside a template literal is exactly where these files do their work.
     The brace opened by `${` is marked on the stack, so an object literal or an
     arrow-function body *inside* an interpolation closes itself rather than
@@ -186,7 +186,7 @@ def test_named_imports_exist_in_the_module_they_name(path):
     """The link-time failure, caught at test time.
 
     `import { esc } from "../ui.js"` where `ui.js` no longer exports `esc` does
-    not fail that one call — it discards every module in the graph, and the whole
+    not fail that one call, it discards every module in the graph, and the whole
     site renders blank.
     """
     source = path.read_text(encoding="utf-8")

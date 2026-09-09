@@ -152,6 +152,6 @@ def test_template_filename_convention_is_the_one_the_site_accepts(name, variatio
     ("Template_3.py", "top_bids_last_round"),
 ))
 def test_template_3_does_not_promise_an_observation_it_never_gets(name, forbidden):
-    """`top_bids_last_round` is variation 4 only — the engine does not put it in
+    """`top_bids_last_round` is variation 4 only, the engine does not put it in
     a V3 observation, so a V3 template touching it would KeyError on round 2."""
     assert forbidden not in (LATE_DIR / name).read_text(encoding="utf-8")

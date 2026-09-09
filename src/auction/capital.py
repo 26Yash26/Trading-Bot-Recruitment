@@ -11,14 +11,14 @@ times it; nobody is told anyone else's capital.
 
 Why this shape rather than a multiple of M_b alone. The block bounds are drawn
 on grids (``distributions.draw_block_bounds``) where m_b can be a large fraction
-of M_b — m_b = 1000 with a range of 100 gives M_b = 1100, a block where every
+of M_b, m_b = 1000 with a range of 100 gives M_b = 1100, a block where every
 value sits within 10% of every other. Scaling capital by M_b there would hand
 every bot roughly the same bankroll relative to the spread of values, which is
 the one thing the capital draw exists to vary. Scaling by the range keeps
 kappa's meaning constant: it is always "how many block-widths can I afford".
 
 It also removes two patches the old formula needed. m_b >= 10 and range >= 100,
-so the smallest possible capital is 10 + 100*0.5 = 60 -- comfortably positive,
+so the smallest possible capital is 10 + 100*0.5 = 60, comfortably positive,
 with no floor term, and no additive jitter to keep a small block off zero.
 
 The bounds are parameters rather than constants because the admin console can

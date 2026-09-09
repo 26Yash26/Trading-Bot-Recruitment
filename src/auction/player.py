@@ -7,7 +7,7 @@ report it back.
 
 Legality (problem statement §4.7): a bid above the player's available capital,
 below zero, not a number, or not returned in time is filed as 0 for that round.
-The legal ceiling is the player's own capital — ``max_bid`` stays as an optional
+The legal ceiling is the player's own capital, ``max_bid`` stays as an optional
 fixed ceiling so the engine's unit tests can pin payoff arithmetic.
 """
 
@@ -53,7 +53,7 @@ class Player:
             "starting_capital": self.starting_capital,
             "max_bid": self._max_bid,
         }
-        # A crash in the constructor is the participant's bug -- let it surface
+        # A crash in the constructor is the participant's bug, let it surface
         # here (run_local / harness decide what to do with it).
         self._bot = bot_cls(config)
 

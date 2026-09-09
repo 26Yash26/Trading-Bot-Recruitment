@@ -1,7 +1,7 @@
 // Google sign-in, restricted to @smail.iitm.ac.in.
 //
 // The OAuth round trip lands back on the server, which sets an HttpOnly cookie
-// and redirects — no token ever passes through the URL or through JS.
+// and redirects, no token ever passes through the URL or through JS.
 
 import { navigate, store } from "../main.js";
 import { revealLines } from "../motion.js";

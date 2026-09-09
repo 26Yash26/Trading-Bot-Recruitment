@@ -1,8 +1,8 @@
 // The auction tape drawn in the hero panel.
 //
 // A stepped chart of the winning bid and the runner-up bid, scrolling right to
-// left. The series is generated here, not fetched — per-round bids are not
-// published, and pretending otherwise would be a lie on the front page — so the
+// left. The series is generated here, not fetched, per-round bids are not
+// published, and pretending otherwise would be a lie on the front page, so the
 // panel that holds it is captioned as a sample game.
 //
 // It reads its colours out of the stylesheet rather than hard-coding them, which
@@ -87,7 +87,7 @@ export function startTape(canvas) {
 
     ctx.clearRect(0, 0, width, height);
 
-    // Gridlines — four of them, the same spacing a printed chart would use.
+    // Gridlines, four of them, the same spacing a printed chart would use.
     ctx.strokeStyle = rule;
     ctx.lineWidth = 1;
     for (let i = 1; i <= 4; i += 1) {

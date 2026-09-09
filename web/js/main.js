@@ -291,7 +291,7 @@ function renderAnnouncement() {
   try {
     dismissed = localStorage.getItem(announcementKey(text)) === "1";
   } catch (error) {
-    /* site data blocked — show it, which is the safe direction */
+    /* site data blocked, show it, which is the safe direction */
   }
   if (dismissed) {
     host.innerHTML = "";
@@ -427,7 +427,7 @@ function connectLive() {
       }),
 
     // Fires the moment a showdown starts, before any game has finished. Without
-    // this the page would keep showing "starting…" until the first game landed —
+    // this the page would keep showing "starting…" until the first game landed,
     // fifteen seconds or more with real 2000-round games.
     onShowdown: ({ status }) => {
       const running = status === "started";

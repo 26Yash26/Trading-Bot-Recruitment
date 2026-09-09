@@ -1,6 +1,6 @@
 """Parent side of the sandbox (layer 3): one child process per bot.
 
-``SandboxedBotFactory`` is a drop-in for a bot *class* — the engine's
+``SandboxedBotFactory`` is a drop-in for a bot *class*, the engine's
 ``Player`` does ``bot_cls(config)`` and then ``.get_bid(obs)``, and that is
 exactly the surface a factory + proxy provide. So sandboxing costs the engine
 nothing:
@@ -55,7 +55,7 @@ class SandboxLimits:
 
 
 def _bwrap_works() -> bool:
-    """Rehearse the real bind set — a probe with fewer binds passes or fails for
+    """Rehearse the real bind set, a probe with fewer binds passes or fails for
     reasons that say nothing about whether the actual sandbox will start."""
     if not shutil.which("bwrap"):
         return False
@@ -202,7 +202,7 @@ def _build_argv(tier: str, bot_path: Path, limits: SandboxLimits) -> list[str]:
 class SandboxedBot:
     """Stands in for a participant's ``Bot`` instance, one process behind it.
 
-    Every failure mode — timeout, crash, memory kill, garbage return value —
+    Every failure mode, timeout, crash, memory kill, garbage return value,
     surfaces as an exception, which the engine's ``Player`` already turns into a
     bid of 0 and an incremented error count.
     """
@@ -228,7 +228,7 @@ class SandboxedBot:
         except Exception as exc:  # noqa: BLE001 - any startup failure is theirs
             self._disqualify(f"init failed: {exc}"[:300])
 
-    # -- lifecycle ---------------------------------------------------------
+    #, lifecycle ---------------------------------------------------------
 
     def _spawn(self) -> None:
         argv = _build_argv(self.tier, self.bot_path, self.limits)
@@ -278,7 +278,7 @@ class SandboxedBot:
             except Exception:
                 pass
 
-    # -- protocol ----------------------------------------------------------
+    #, protocol ----------------------------------------------------------
 
     def _read_frame(self, deadline: float) -> dict:
         """Read one JSON line, or raise TimeoutError once ``deadline`` passes."""
@@ -309,7 +309,7 @@ class SandboxedBot:
             raise RuntimeError(str(frame.get("error", "bot error"))[:300])
         return frame
 
-    # -- what the engine calls ---------------------------------------------
+    #, what the engine calls ---------------------------------------------
 
     def get_bid(self, obs) -> float:
         if self.disqualified or not self.alive:

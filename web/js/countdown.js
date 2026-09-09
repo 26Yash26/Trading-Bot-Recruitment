@@ -1,7 +1,7 @@
 // The showdown clock.
 //
 // `next_run_at` is an absolute server timestamp, and the browser's clock is not
-// trustworthy — a laptop three minutes fast would show a countdown three minutes
+// trustworthy, a laptop three minutes fast would show a countdown three minutes
 // short. So the offset between the two clocks is measured once from `/api/state`
 // and every tick is computed against the corrected time.
 
@@ -33,7 +33,7 @@ function digit(key, caption, size) {
 
 /**
  * The clock's markup. `label` names what is being counted down to; `size`
- * picks how loud it is — the hero uses `lg`, the sidebars `sm`.
+ * picks how loud it is, the hero uses `lg`, the sidebars `sm`.
  */
 export function renderCountdown({ label = "Next showdown", size = "md" } = {}) {
   const digits = SIZES[size] || SIZES.md;

@@ -13,7 +13,7 @@ legal and does not go broke immediately. It is NOT the competition engine, and
 it does not try to be:
 
   * the hidden bounds [m_b, M_b] are DIFFERENT every run and are not the ones
-    used to score you -- a bot tuned to what you see here will not travel;
+    used to score you, a bot tuned to what you see here will not travel;
   * you play three sample bots, not nineteen real ones;
   * ties, rounding and edge cases may resolve differently here.
 
@@ -136,7 +136,7 @@ class Seat:
 
 
 # The two grids every block's hidden bounds are drawn from. These are the real
-# ones -- the same code the competition runs. What you do NOT get is the seed,
+# ones, the same code the competition runs. What you do NOT get is the seed,
 # so you cannot know which of the 10,000 combinations you will actually face.
 BLOCK_MIN_CHOICES = tuple(range(10, 1001, 10))        # m_b:     10 .. 1000, step 10
 BLOCK_RANGE_CHOICES = tuple(range(100, 10001, 100))   # range_b: 100 .. 10000, step 100
@@ -162,7 +162,7 @@ def starting_capital(rng: random.Random, block_min: float, block_max: float) -> 
     """Problem statement, capital resets: C = m_b + (M_b - m_b) * kappa.
 
     kappa is how many block-widths of headroom you start with. It is the same
-    idea whether the block spans [10, 10010] or [1000, 1100] -- which is the
+    idea whether the block spans [10, 10010] or [1000, 1100], which is the
     point, because those are completely different games.
     """
     kappa = rng.uniform(0.5, 2.5)
@@ -290,7 +290,7 @@ def report(seats, records, bot_name: str) -> None:
     print(f"  mean pi over the four blocks: {statistics.fmean(pis):+.3f}")
     print("  pi is your block profit divided by that block's hidden maximum value.")
     print("  The competition ranks pi against the other nineteen bots in your group,")
-    print("  block by block -- not your raw profit. Consistency across the four")
+    print("  block by block, not your raw profit. Consistency across the four")
     print("  blocks matters more than one good one, and a bankruptcy is expensive.")
     print()
     print("  Reminder: these bounds are a local stand-in and change with --seed.")

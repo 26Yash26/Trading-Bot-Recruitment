@@ -1,7 +1,7 @@
 """Accept-or-reject a single submission (build checklist 2.B).
 
-Runs at upload time, so a participant finds out in seconds — not at the next
-showdown — that their file has a syntax error or bids its whole capital away in
+Runs at upload time, so a participant finds out in seconds, not at the next
+showdown, that their file has a syntax error or bids its whole capital away in
 thirty rounds.
 
 Three gates, cheapest first:
@@ -24,7 +24,7 @@ from src.auction.distributions import draw_block_bounds, normalise_block_bounds
 
 from .simulate import BotSpec, play_group
 
-# ROLLNO_variation.py  — e.g. ME24B152_1.py  (problem statement §10)
+# ROLLNO_variation.py, e.g. ME24B152_1.py  (problem statement §10)
 FILENAME_RE = re.compile(r"^(?P<roll>[A-Z]{2}[0-9]{2}[A-Z][0-9]{3})_(?P<variation>[1234])\.py$")
 ROLL_RE = re.compile(r"^[A-Z]{2}[0-9]{2}[A-Z][0-9]{3}$")
 
@@ -86,7 +86,7 @@ def validate(
     if violations:
         return ValidationResult(
             ok=False,
-            reason=f"Rejected by the code policy — {describe(violations)}",
+            reason=f"Rejected by the code policy, {describe(violations)}",
             roll=roll,
             variation=variation,
         )
@@ -94,12 +94,12 @@ def validate(
     # The smoke test must face the same KIND of block a real game does, or a bot
     # that only works on a hard-coded range passes here and dies in the showdown.
     #
-    # Under the normal "random" mode that means drawing off the published grids —
+    # Under the normal "random" mode that means drawing off the published grids,
     # on a fresh seed each time, deliberately: a participant resubmitting learns
     # nothing repeatable about the hidden bounds from the verdict.
     #
     # "fixed" takes the admin schedule, which may hold either a flat list or one
-    # per tournament iteration (§9) — see `normalise_block_bounds`. This only
+    # per tournament iteration (§9), see `normalise_block_bounds`. This only
     # ever plays one game, so it takes iteration 0's; a malformed setting is
     # refused with a ValueError rather than reaching ValueSampler and crashing
     # the request.
@@ -128,7 +128,7 @@ def validate(
     if outcome.disqualified:
         return ValidationResult(
             ok=False,
-            reason=f"Sandbox rejected your bot — {outcome.reason}",
+            reason=f"Sandbox rejected your bot, {outcome.reason}",
             roll=roll, variation=variation,
         )
     if outcome.eliminated_round is not None:

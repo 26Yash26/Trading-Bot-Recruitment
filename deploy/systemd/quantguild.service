@@ -12,7 +12,7 @@ Group=quantguild
 # to main; the code is read from here, but nothing writable lives here.
 WorkingDirectory=/var/www/html
 
-# Secrets (OAuth client, admin emails, public origin) — outside the web root,
+# Secrets (OAuth client, admin emails, public origin), outside the web root,
 # root:quantguild 0640, never committed. See deploy/quantguild.env.example.
 EnvironmentFile=/etc/quantguild.env
 Environment=QG_DATA_DIR=/var/lib/quantguild

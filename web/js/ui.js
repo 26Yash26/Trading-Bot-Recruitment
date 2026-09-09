@@ -1,4 +1,4 @@
-// Formatting, escaping, and the four variations. No DOM choreography — that
+// Formatting, escaping, and the four variations. No DOM choreography, that
 // lives in motion.js.
 //
 // Rule for this codebase: markup is built from template strings, and *every*
@@ -141,7 +141,7 @@ export const VARIATION_META = {
   },
   // Variations 3 and 4 carry style only until they are released. Their names,
   // formulas and rules live in `server/late_variations.js`, which is served from
-  // `/api/variations/late.js` and 404s while they are switched off — so nothing
+  // `/api/variations/late.js` and 404s while they are switched off, so nothing
   // about them reaches a browser before mock auction 1. `registerLateVariation`
   // fills these in when that module lands.
   3: {
@@ -194,8 +194,8 @@ export function registerLateVariation(id, meta) {
 /**
  * The variations the admin currently has switched on.
  *
- * Everything user-facing goes through this — the home page cards, the
- * leaderboard tabs, the rules, the submit slots — so releasing variation 3 in
+ * Everything user-facing goes through this, the home page cards, the
+ * leaderboard tabs, the rules, the submit slots, so releasing variation 3 in
  * the control room releases it on the site. Before `/api/state` has landed
  * there is nothing to filter by; after it has, an empty list genuinely means
  * none are in play.

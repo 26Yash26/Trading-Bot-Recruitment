@@ -2,7 +2,7 @@
 # Rebuild web/css/app.css from web/src/input.css.
 #
 # Tailwind ships a standalone binary, so this needs no node, no npm and no
-# node_modules — which matters because the VM has none of those and serves
+# node_modules, which matters because the VM has none of those and serves
 # web/css/app.css straight out of the repo. Run this after editing input.css or
 # after adding classes to index.html / web/js, then commit the built CSS.
 #

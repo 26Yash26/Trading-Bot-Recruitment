@@ -27,14 +27,14 @@ ACTIVE that round:
 
 Four consequences worth thinking about before you write a line:
 
-  1. Rank 1 pays b2, not b1. Overbidding no longer costs you directly -- it
+  1. Rank 1 pays b2, not b1. Overbidding no longer costs you directly, it
      costs you only through the b1 > X branch, where the whole safety net is
      switched off and you eat X - b1 alone. That branch is the entire risk of
      this variation.
   2. Rank 2 is PAID here, not punished: X - b1 whenever b1 <= X. Second place
      went from the worst seat in variation 3 to a paid one.
   3. Ranks 3, 4 and 5 are the losers. Being third is strictly worse than being
-     sixth -- there is no safe spot just under the money. Either commit to the
+     sixth, there is no safe spot just under the money. Either commit to the
      top two or stay well clear of them.
   4. It is zero-sum in the b1 <= X branch. Whatever you make is taken from
      three specific opponents, which is why `top_bids_last_round` is handed to
@@ -43,7 +43,7 @@ Four consequences worth thinking about before you write a line:
 
 You are never told X for the current round before you bid, only
 `max_value_last_round`. Ranks are distinct here, so ties are broken uniformly
-at random -- matching another bot's bid exactly is a coin flip, not a shared
+at random, matching another bot's bid exactly is a coin flip, not a shared
 win, and a coin flip between rank 2 (paid) and rank 3 (charged) is expensive.
 """
 
@@ -117,7 +117,7 @@ class Bot:
             sum(self.seen_max) / len(self.seen_max) if self.seen_max else x
         )
 
-        # `top_bids_last_round[2]` is b3 -- last round's most heavily charged
+        # `top_bids_last_round[2]` is b3, last round's most heavily charged
         # bid, and the line you have to clear to stay out of the funded ranks.
         # Read here so you can see how; deliberately NOT acted on, because
         # chasing b3 upward is how you end up in the b1 > X branch.

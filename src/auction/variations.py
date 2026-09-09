@@ -1,30 +1,30 @@
 """Payoff rules for the four auction variations (problem statement §6).
 
-``X`` is the maximum value drawn by the players *active in that round* —
-bankrupt bots contribute no value, which is why the active count matters.
+``X`` is the maximum value drawn by the players *active in that round*.
+Bankrupt bots contribute no value, which is why the active count matters.
 ``b1 >= b2 >= b3 >= ...`` are the bids sorted descending.
 
-Variation 1 — private value, first price
+Variation 1, private value, first price
     winner: x_i - b1.  Everyone else zero. Ties: every tied bidder wins in full.
 
-Variation 2 — common value, first price
+Variation 2, common value, first price
     winner: X - b1.    Everyone else zero. Ties: every tied bidder wins in full.
 
-Variation 3 — common value with a runner-up penalty
+Variation 3, common value with a runner-up penalty
     winner: X - b1
     rank 2: -0.5 * (X - b1), and zero when the winner's surplus is negative.
     Ranks are distinct here, so ties are broken uniformly at random.
 
-Variation 4 — second-price top two, funded by ranks 3-5
+Variation 4, second-price top two, funded by ranks 3-5
     If b1 <= X:  rank 1 takes X - b2, rank 2 takes X - b1, and ranks 3, 4 and 5
-    pay 0.5, 0.3 and 0.2 of the total the top two earned — so the round is
+    pay 0.5, 0.3 and 0.2 of the total the top two earned, so the round is
     exactly zero-sum. Fewer than five active players: the shares are
     renormalised over the ranks that exist; with two or fewer, no penalty is
     collected at all.
     If b1 > X:  the winner alone takes X - b1 (a loss) and nobody else is
     touched. No penalties are collected.
 
-Reference sample run (problem statement §14) — the test fixture:
+Reference sample run (problem statement §14), the test fixture:
     x = [30, 50, 60], bids = [45, 55, 30], capital 100 each, X = 60.
     Bot 2 (bid 55) wins; Bot 1 (bid 45) is second.
     V1: winner 50 - 55 = -5     -> caps [100,  95, 100]
@@ -64,7 +64,7 @@ def payoff_v3_winner(max_value: float, winning_bid: float) -> float:
 def payoff_v3_second(max_value: float, winning_bid: float) -> float:
     """Variation 3 runner-up payoff: -0.5 * surplus, never positive.
 
-    If the winner's surplus (X - b1) is negative the runner-up pays nothing —
+    If the winner's surplus (X - b1) is negative the runner-up pays nothing:
     the penalty never turns into a reward for the winner's loss.
     """
     surplus = float(max_value) - float(winning_bid)
@@ -91,7 +91,7 @@ def payoff_v4(max_value: float, sorted_bids) -> list[float]:
 
     if b1 > X:
         # The winner overpaid. They alone eat the loss and no penalties are
-        # collected — the round is not zero-sum in this branch, by design.
+        # collected, the round is not zero-sum in this branch, by design.
         payoffs[0] = X - b1
         return payoffs
 

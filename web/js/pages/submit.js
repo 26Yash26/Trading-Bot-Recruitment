@@ -80,7 +80,7 @@ function verdictCard(result) {
         <p class="d4 font-display text-loss">Rejected</p>
         <p class="mt-4 text-sm leading-relaxed">${esc(result.message)}</p>
         <p class="mt-4 font-mono text-[11px] text-ink-3">
-          Fix it and upload again — there is no penalty for retrying.
+          Fix it and upload again, there is no penalty for retrying.
         </p>
       </div>`;
   }
@@ -109,7 +109,7 @@ function verdictCard(result) {
           .join("")}
       </dl>
       <p class="mt-5 font-mono text-[11px] leading-relaxed text-ink-3">
-        A short game against the sample bots on stand-in bounds — a sanity check, not a ranking.
+        A short game against the sample bots on stand-in bounds, a sanity check, not a ranking.
         The real distribution is hidden.
       </p>
     </div>`;
@@ -140,8 +140,8 @@ export async function renderSubmit(app) {
         <p class="lede mt-10 max-w-2xl" data-fade>
           One file per variation, named
           <code class="font-mono text-flame">${esc(roll || "ROLLNO")}_&lt;variation&gt;.py</code>.
-          It is checked the moment you upload it — static policy first, then a short game against the
-          sample bots — and you get the verdict right here.
+          It is checked the moment you upload it, static policy first, then a short game against the
+          sample bots, and you get the verdict right here.
         </p>
 
         ${
@@ -300,7 +300,7 @@ export async function renderSubmit(app) {
 
       try {
         result = await api.submit(file);
-        toast("Accepted — your bot is in the next showdown.", "ok");
+        toast("Accepted, your bot is in the next showdown.", "ok");
         const me = await api.me();
         store.set({ me });
         paint();

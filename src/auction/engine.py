@@ -43,7 +43,7 @@ from .player import Player
 
 @dataclass
 class BlockSummary:
-    """One player's result for one block — the unit the leaderboard scores."""
+    """One player's result for one block, the unit the leaderboard scores."""
 
     block: int
     start_round: int
@@ -156,7 +156,7 @@ def run_game(
     block_bounds      : list of (lo, hi) uniform bounds, one per block
     seed              : RNG seed -> reproducible run
     num_rounds        : total rounds; block_size splits them into blocks
-    starting_capitals : legacy fixed-capital mode — a number, or one per bot
+    starting_capitals : legacy fixed-capital mode, a number, or one per bot
     capital_draw      : redraw every player's capital at each block boundary
     max_bid           : legacy fixed bid ceiling. ``None`` means the ceiling is
                         the player's own capital, which is the current rule.

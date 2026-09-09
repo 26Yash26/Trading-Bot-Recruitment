@@ -23,7 +23,7 @@ written against the code.
 - **20 bots per group, 2000 rounds, split into 4 blocks of 500.**
 - Each round every solvent bot privately draws `xᵢ ~ U[m_b, M_b]`. Both bounds
   are hidden and change every block. Nobody is told when a block boundary
-  happens — detecting it is part of the problem.
+  happens. Detecting it is part of the problem.
 - **The bounds are drawn, not chosen.** Per block, independently:
   `m_b ~ {10, 20, … 1000}` (step 10) and `range_b ~ {100, 200, … 10000}`
   (step 100), with `M_b = m_b + range_b`. 10,000 possible blocks, spanning two
@@ -42,12 +42,12 @@ written against the code.
   block with does not carry over. Bankruptcy costs you the rest of *that block*
   only.
 - **Four variations** (3 and 4 are released only after mock auction 1):
-  1. Private value, first price — winner takes `xᵢ − b₁`.
-  2. Common value, first price — winner takes `X − b₁`, X = max value over
-     active players.
-  3. Runner-up penalty — winner takes `X − b₁`; rank 2 pays `−0.5(X − b₁)`.
-  4. Funded second price — rank 1 takes `X − b₂`, rank 2 takes `X − b₁`, funded
-     0.5/0.3/0.2 by ranks 3–5. Zero-sum. If `b₁ > X` the winner alone eats it.
+  1. Private value, first price. The winner takes `xᵢ − b₁`.
+  2. Common value, first price. The winner takes `X − b₁`, where X is the
+     maximum value over the active players.
+  3. Runner-up penalty. The winner takes `X − b₁`; rank 2 pays `−0.5(X − b₁)`.
+  4. Funded second price. Rank 1 takes `X − b₂` and rank 2 takes `X − b₁`, funded
+     0.5/0.3/0.2 by ranks 3 to 5. Zero-sum. If `b₁ > X` the winner alone eats it.
   V1/V2 let every tied top bidder win; V3/V4 break ties uniformly at random.
 - **Scoring is normalised, not raw profit.** Per block,
   `π = (C_end − C_start) / M_b`; standardised within the group to
@@ -56,16 +56,25 @@ written against the code.
 
 ## The tournament, and what a run is
 
-`grouping` is set **per iteration**, and a schedule shorter than `iterations`
-holds its last entry. The default is `["random", "balanced"]`: iteration 1 draws
-groups blind because there is nothing to seed on yet, and every iteration after
-it is snake-seeded on the standing so far. So the full tournament runs on
-**every** showdown, not only when someone sets it up. `["random", "random",
-"balanced", "finals", "finals"]` is §9 in full, and the admin page has it as a
-preset.
+A **showdown** is the whole tournament, played end to end. By default that is
+five iterations:
 
-Iterations play in order — a balanced or finals iteration seeds on the standing
-after the ones before it, so they cannot all be planned up front.
+| Iteration | Grouping | What it does |
+|---|---|---|
+| 1, 2 | `random` | the field shuffled into groups of 20 on a fresh seed |
+| 3 | `balanced` | sorted by points so far and dealt in a snake, so groups are equal in average strength |
+| 4, 5 | `finals` | only the leading `finals_size` bots, head to head |
+
+Iterations play in order, because a balanced or finals iteration seeds on the
+standing after the ones before it. They cannot all be planned up front.
+
+`grouping` is a list with one mode per iteration and `iterations` is its length;
+the admin page edits them as one control, so the two can never disagree. A list
+shorter than `iterations` holds its last entry.
+
+A showdown can also be run for **one variation at a time**. The live board takes
+each variation from the newest run that scored it, so replaying variation 1
+leaves variation 2 exactly as it was.
 
 Every showdown is stamped with a **kind**, and it is not a label:
 
@@ -83,13 +92,13 @@ not addressable by id.
 
 | Path | What |
 |---|---|
-| `index.html`, `web/` | the site — hand-written SPA, ES modules, no build step but Tailwind |
+| `index.html`, `web/` | the site: a hand-written SPA, ES modules, no build step but Tailwind |
 | `web/js/pages/` | one module per route: home, leaderboard, rules, submit, login, admin |
 | `web/js/motion.js` | scroll reveals, counters, parallax, cursor ring |
 | `web/src/input.css` | the design system; build with `./scripts/build_css.sh` |
 | `server/` | FastAPI: API, Google OAuth, scheduler, SQLite store |
-| `server/late_variations.js` | the V3/V4 browser copy — served by API, 404 until released |
-| `src/auction/` | the engine — round loop, variations, bounds grids, capital, scoring |
+| `server/late_variations.js` | the V3/V4 browser copy: served by the API, 404 until released |
+| `src/auction/` | the engine: round loop, variations, bounds grids, capital, scoring |
 | `harness/` | upload validation, grouped simulation, leaderboard aggregation |
 | `sandbox/` | AST policy, per-bot child process, isolation tiers |
 | `starter-kit/` | what participants download now (`build_kit.py` builds the zip) |
@@ -112,7 +121,7 @@ Google OAuth is not configured locally. `seed_demo` prints an admin session
 cookie; see `docs/RUNBOOK.md` for how to use it.
 
 Editing the frontend: `./scripts/build_css.sh --watch`, and **commit
-`web/css/app.css`** — the VM has no build step. `tests/test_web_assets.py`
+`web/css/app.css`**, because the VM has no build step. `tests/test_web_assets.py`
 structurally checks every served module, since nothing else would catch a
 syntax slip before it blanked the site.
 
@@ -128,7 +137,7 @@ python build_kit.py          # -> public/starter-kit.zip
 ```
 
 Tests fail if either is stale. `build_kit.py --release-v3-v4` builds the other
-kit — see the release procedure in `docs/RUNBOOK.md`.
+kit. See the release procedure in `docs/RUNBOOK.md`.
 
 ## The admin page
 
@@ -143,14 +152,14 @@ Settings live in the SQLite `settings` table, not in code. A change is pushed to
 every open browser over the leaderboard SSE stream, so releasing a variation
 takes effect everywhere without a reload.
 
-New columns reach the VM's database through `store.MIGRATIONS` — it holds every
+New columns reach the VM's database through `store.MIGRATIONS`. It holds every
 real submission and is never dropped and recreated, so `CREATE TABLE IF NOT
 EXISTS` is a no-op there.
 
 ## Embargo: variations 3 and 4
 
-Two things a participant can get hold of before release — the kit zip and what
-the browser is served — and `tests/test_embargo.py` checks both, plus the
+There are two things a participant can get hold of before release: the kit zip
+and whatever the browser is served. `tests/test_embargo.py` checks both, plus the
 scoring PDFs. Nothing about V3/V4 sits in the JS bundle or in `starter-kit/`;
 the copy lives in `server/late_variations.js` and `late-kit/`, neither of which
 nginx will serve. `docs/scoring.tex` compiles twice so the public PDF can go out

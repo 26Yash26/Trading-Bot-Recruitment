@@ -1,7 +1,7 @@
 # Restart the API when a deploy lands.
 #
 # The GitHub Actions workflow only runs `git fetch` + `git reset --hard` on the
-# VM — it restarts nothing, and .github/ is off limits by repo policy. So the VM
+# VM, it restarts nothing, and .github/ is off limits by repo policy. So the VM
 # watches for the deploy itself: `git fetch` rewrites FETCH_HEAD every time,
 # which makes it a reliable trigger even when the commit is unchanged.
 #

@@ -35,7 +35,7 @@ def test_static_assets_are_not_cached_without_revalidation(prefix):
     `index.html` is `no-cache`, so a returning visitor revalidates the HTML and
     then pulls the module graph from cache. ES modules resolve every import
     before executing anything, so one stale file missing an export that a fresh
-    file imports is a link-time failure of the WHOLE graph — a blank page with
+    file imports is a link-time failure of the WHOLE graph, a blank page with
     no error, persisting for the whole max-age. A deploy mid-event would have
     done that to everyone with the site already open.
 
@@ -45,7 +45,7 @@ def test_static_assets_are_not_cached_without_revalidation(prefix):
 
     assert "no-cache" in body, f"{prefix} must send Cache-Control: no-cache"
     assert not re.search(r"max-age=(?!0)\d+", body), (
-        f"{prefix} sets a positive max-age — a deploy will strand returning "
+        f"{prefix} sets a positive max-age, a deploy will strand returning "
         "visitors on a half-stale module graph"
     )
     assert not re.search(r"^\s*expires\s+(?!-1)", body, re.MULTILINE), (

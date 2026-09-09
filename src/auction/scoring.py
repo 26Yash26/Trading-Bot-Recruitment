@@ -4,14 +4,14 @@ Raw profit is not comparable across blocks: a block whose hidden maximum is 500
 pays out roughly fifty times a block whose maximum is 10, and inside one block
 the players start from different capitals. So it is normalised twice.
 
-Step 1 — scale normalisation, per player per block::
+Step 1, scale normalisation, per player per block::
 
     pi = (capital at the end of the block - capital at the start) / M_b
 
 i.e. profit measured in units of that block's (hidden) maximum value. A bot that
 went bankrupt ends on zero, so its pi is -C_start / M_b.
 
-Step 2 — standardisation within the group of 20, per block::
+Step 2, standardisation within the group of 20, per block::
 
     z = clip((pi - mean) / stdev, -3, +3)          (z = 0 when stdev is 0)
     P = 50 + 15 z                                  -> [5, 95]
@@ -41,8 +41,8 @@ def block_points(profits) -> list[float]:
     """Step 2: standardise one block's normalised profits across the group.
 
     ``profits`` is every player's pi for the same block. Returns their points in
-    the same order. With a degenerate block — one player, or everybody scoring
-    identically — nobody is separated, so everyone sits on the centre.
+    the same order. With a degenerate block, one player, or everybody scoring
+    identically, nobody is separated, so everyone sits on the centre.
     """
     values = [float(p) for p in profits]
     if not values:

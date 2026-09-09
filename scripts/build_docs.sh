@@ -4,8 +4,8 @@
 #     ./scripts/build_docs.sh
 #
 # Produces, in docs/:
-#   scoring-public.pdf   variations 1 and 2 — what /api/docs/scoring.pdf serves now
-#   scoring.pdf          all four — served once variations 3 or 4 are released
+#   scoring-public.pdf   variations 1 and 2, what /api/docs/scoring.pdf serves now
+#   scoring.pdf          all four, served once variations 3 or 4 are released
 #
 # Both are committed: the VM has no TeX install, and the API serves them
 # straight out of the checkout.
@@ -49,5 +49,5 @@ if command -v pdftotext >/dev/null; then
     done
     echo "  scoring-public.pdf says nothing about the unreleased variations"
 else
-    echo "  WARNING: pdftotext not installed — embargo check skipped" >&2
+    echo "  WARNING: pdftotext not installed, embargo check skipped" >&2
 fi

@@ -3,7 +3,7 @@
 // One IntersectionObserver drives every reveal on the page. The CSS owns what a
 // reveal *looks* like (`[data-reveal]` in app.css); this file only decides when
 // it happens, and guarantees that nothing stays hidden if the observer never
-// fires — a section that never un-hides is worse than one that never animates.
+// fires, a section that never un-hides is worse than one that never animates.
 
 const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -46,7 +46,7 @@ export function observeReveals(root = document) {
  * Mark everything under `root` as already revealed.
  *
  * A page that repaints on live data builds new `[data-reveal]` nodes after the
- * router's observer has been set up, so nothing is watching them — and the CSS
+ * router's observer has been set up, so nothing is watching them, and the CSS
  * starts them hidden. Re-animating on every leaderboard tick would also be
  * unbearable, so a repaint simply shows its content at once.
  */
@@ -140,7 +140,7 @@ export function startParallax() {
 /**
  * A ring that trails the pointer and swells over anything clickable.
  *
- * The real cursor is deliberately left visible — hiding it is the house style
+ * The real cursor is deliberately left visible, hiding it is the house style
  * on sites like this, and it is also the fastest way to make a form feel broken.
  * Never shown to a coarse pointer, which has no cursor to trail.
  */

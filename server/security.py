@@ -1,6 +1,6 @@
 """Request-level defences: rate limiting and same-origin checks.
 
-Small and dependency-free on purpose — one process, one deployment, a few
+Small and dependency-free on purpose, one process, one deployment, a few
 hundred users. ``slowapi`` would add a dependency to do the same job.
 """
 
@@ -32,7 +32,7 @@ def client_ip(request: Request) -> str:
     with ``proxy_set_header``, which *replaces* anything the client sent.
 
     ``X-Forwarded-For`` is not, because nginx builds it with
-    ``$proxy_add_x_forwarded_for`` — it *appends* the peer address to whatever
+    ``$proxy_add_x_forwarded_for``, it *appends* the peer address to whatever
     arrived. So its leftmost entry is whatever the client made up, and only the
     rightmost entry is the hop nginx actually observed. Reading the left of it
     would let anyone mint a fresh rate-limit bucket per request.
