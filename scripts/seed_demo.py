@@ -34,12 +34,17 @@ class Bot:
     \"\"\"Track the recent winning bids and undercut them slightly.\"\"\"
     def __init__(self, config):
         self.margin = {k}
+        self.recent = []
 
     def get_bid(self, obs):
-        recent = obs.get("highest_bids") or []
-        target = (sum(recent[-20:]) / len(recent[-20:])) if recent else 0.5 * obs["x"]
+        # Only last round's b1 is published now, so keep the window ourselves.
+        b1 = obs.get("highest_bid_last_round") or 0.0
+        if b1 > 0.0:
+            self.recent.append(b1)
+            del self.recent[:-20]
+        target = (sum(self.recent) / len(self.recent)) if self.recent else 0.5 * obs["x"]
         bid = min(target * self.margin, 0.9 * obs["x"])
-        return max(0.0, min(bid, obs["max_bid"], obs["capital"]))
+        return max(0.0, min(bid, obs["capital"]))
 """,
     "cautious": """
 class Bot:

@@ -1,13 +1,15 @@
-"""Participant self-test harness.
+"""Internal engine runner — plays a bot against the sample bots on the real rules.
 
-    python run_local.py --bot my_bot.py --variation 1
+    python run_local.py --bot some_bot.py --variation 4
 
-Runs your bot against the three sample bots for a full game and prints
-capital-over-time and net profit.
+This is OURS, not the participants'. Their copy is `starter-kit/local_test.py`,
+which is a deliberately simplified black box and ships in the kit; this one drives
+`src.auction.engine` directly, covers all four variations, and reports the same
+block scores the leaderboard uses. Use it to sanity-check the engine and to try a
+candidate hidden-bounds schedule before putting it in the admin console.
 
-Note: the real competition uses hidden value-distribution bounds that change every
-500 rounds, and starting capital is varied. The defaults here are only a
-sensible stand-in so you can test locally.
+Unlike the participant runner, this redraws capital at every block boundary
+exactly as the competition does (problem statement capital resets).
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from src.auction.capital import CapitalDraw
 from src.auction.engine import run_game
 from src.auction.loader import load_bot_class
 
@@ -23,13 +26,14 @@ SAMPLE_BOTS = [
     REPO_ROOT / "starter-kit" / "sample_bots" / f"sample_bot_{i}.py" for i in (1, 2, 3)
 ]
 
-# Arbitrary stand-in bounds -- the real ones are hidden and differ. Four blocks of
-# 500 rounds, deliberately not all the same so you can see regime changes matter.
+# Four blocks of 500 rounds, deliberately different in both scale and width so a
+# regime change is actually visible. Not the real schedule -- that lives in the
+# admin console and `secret/config.py`.
 DEFAULT_BLOCK_BOUNDS = [
     (0.0, 100.0),
-    (25.0, 75.0),
-    (0.0, 200.0),
     (40.0, 60.0),
+    (0.0, 400.0),
+    (5.0, 25.0),
 ]
 
 
@@ -52,34 +56,44 @@ def _print_capital_curve(result, n_points: int = 10) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--bot", required=True, help="path to your bot .py file")
-    ap.add_argument("--variation", type=int, choices=(1, 2, 3), required=True)
+    ap.add_argument("--variation", type=int, choices=(1, 2, 3, 4), required=True)
     ap.add_argument("--rounds", type=int, default=2000)
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--capital", type=float, default=100.0, help="starting capital for every bot")
-    ap.add_argument("--max-bid", type=float, default=100.0)
+    ap.add_argument("--fixed-capital", type=float, default=None,
+                    help="legacy fixed-capital mode; omit to redraw per block as the real game does")
     args = ap.parse_args()
 
     user_bot = load_bot_class(args.bot)
     sample_bots = [load_bot_class(p) for p in SAMPLE_BOTS]
     bot_classes = [user_bot, *sample_bots]
 
+    # The default is the real rule: capital redrawn from each block's hidden
+    # maximum. `--fixed-capital` is only for pinning payoff arithmetic by hand.
     result = run_game(
         bot_classes,
         variation=args.variation,
-        starting_capitals=args.capital,
         block_bounds=DEFAULT_BLOCK_BOUNDS,
         seed=args.seed,
-        max_bid=args.max_bid,
         num_rounds=args.rounds,
+        starting_capitals=args.fixed_capital,
+        capital_draw=None if args.fixed_capital is not None else CapitalDraw(),
     )
 
     print()
-    print(f"  bot 0 = your bot ({Path(args.bot).name});  bots 1-3 = sample bots")
+    print(f"  bot 0 = {Path(args.bot).name};  bots 1-3 = sample bots")
     print(result.summary())
     _print_capital_curve(result)
     you = result.players[0]
-    print(f"\n  YOUR NET PROFIT: {you.net_profit:+.2f}  "
-          f"(final capital {you.final_capital:.2f}, wins {you.wins})")
+    print(f"\n  bot 0: iteration score {you.iteration_score:.1f}, "
+          f"mean pi {you.mean_normalised_profit:+.3f}, "
+          f"worst pi {you.worst_normalised_profit:+.3f}, "
+          f"survived {you.blocks_survived}/{len(you.blocks)} blocks")
+    print(f"  {'block':>5}  {'M_b':>8}  {'start':>10}  {'end':>10}  {'pi':>8}  {'points':>7}")
+    for b in you.blocks:
+        flag = "  BANKRUPT" if b.bankrupt else ""
+        print(f"  {b.block:>5}  {b.block_max:>8.1f}  {b.start_capital:>10.2f}  "
+              f"{b.end_capital:>10.2f}  {b.normalised_profit:>+8.3f}  {b.points:>7.1f}{flag}")
+    print(f"\n  raw net profit {you.net_profit:+.2f} — reported, but not what ranks you.")
 
 
 if __name__ == "__main__":

@@ -1,9 +1,17 @@
-"""Per-block uniform sampling (0.C)."""
+"""Per-block uniform sampling, and the per-iteration schedules built on it."""
+
+from pathlib import Path
 
 import numpy as np
 import pytest
 
-from src.auction.distributions import ValueSampler
+from harness.evaluate import ShowdownSettings, build_jobs
+from harness.simulate import BotSpec
+from src.auction.distributions import ValueSampler, normalise_block_bounds
+
+SAMPLE_BOT = (
+    Path(__file__).resolve().parent.parent / "starter-kit" / "sample_bots" / "sample_bot_1.py"
+)
 
 
 def test_values_fall_within_block_bounds():
@@ -42,3 +50,87 @@ def test_different_seed_different_draws():
 def test_rejects_inverted_bounds():
     with pytest.raises(ValueError):
         ValueSampler([(100.0, 0.0)], seed=1)
+
+
+# --- block bounds, one schedule per iteration ----------------------------------
+
+
+class TestNormaliseBlockBounds:
+    """`normalise_block_bounds` is what the admin console types into.
+
+    It guards the one setting that can take down every game at once: M_b is the
+    divisor in the normalised profit and the scale of the capital draw, so a
+    zero, a negative or an inverted pair breaks the whole showdown.
+    """
+
+    def test_flat_schedule_is_wrapped(self):
+        assert normalise_block_bounds([(0, 100), (25, 75)]) == [
+            [(0.0, 100.0), (25.0, 75.0)]
+        ]
+
+    def test_per_iteration_schedules_are_kept_apart(self):
+        out = normalise_block_bounds([[(0, 10), (5, 50)], [(1, 2), (3, 4)]])
+        assert out == [[(0.0, 10.0), (5.0, 50.0)], [(1.0, 2.0), (3.0, 4.0)]]
+
+    def test_block_count_is_checked_when_asked(self):
+        with pytest.raises(ValueError, match="expected 4 blocks"):
+            normalise_block_bounds([(0, 100), (0, 50)], num_blocks=4)
+
+    @pytest.mark.parametrize(
+        "bad, message",
+        [
+            ([], "non-empty"),
+            ([(5, 5)], "greater than"),
+            ([(10, 4)], "greater than"),
+            ([(-20, -5)], "must be positive"),
+            ([("a", "b")], "must be numbers"),
+            ([(0, 100, 7)], r"\[min, max\] pair"),
+            ([(0, float("inf"))], "finite"),
+        ],
+    )
+    def test_bad_input_is_refused(self, bad, message):
+        with pytest.raises(ValueError, match=message):
+            normalise_block_bounds(bad)
+
+
+class TestBoundsPerIteration:
+    """Problem statement §9 wants iteration 2 to face *different distributions*,
+    not the same ones under a fresh seed."""
+
+    def test_each_iteration_gets_its_own_schedule(self):
+        settings = ShowdownSettings(
+            iterations=3,
+            block_bounds=(
+                [(0, 100), (0, 100), (0, 100), (0, 100)],
+                [(0, 10), (0, 10), (0, 10), (0, 10)],
+                [(0, 500), (0, 500), (0, 500), (0, 500)],
+            ),
+        )
+        maxima = [settings.bounds_for_iteration(i)[0][1] for i in range(3)]
+        assert maxima == [100.0, 10.0, 500.0]
+
+    def test_short_list_cycles(self):
+        settings = ShowdownSettings(
+            block_bounds=([(0, 100)], [(0, 10)]),
+        )
+        assert settings.bounds_for_iteration(0) == settings.bounds_for_iteration(2)
+        assert settings.bounds_for_iteration(1) == settings.bounds_for_iteration(3)
+
+    def test_single_schedule_is_reused(self):
+        settings = ShowdownSettings(block_bounds=((0, 100), (40, 60)))
+        assert settings.bounds_for_iteration(0) == settings.bounds_for_iteration(9)
+
+    def test_jobs_carry_the_iteration_schedule(self):
+        specs = {1: [BotSpec(key=f"R{i}", path=SAMPLE_BOT) for i in range(20)]}
+        settings = ShowdownSettings(
+            variations=(1,),
+            iterations=2,
+            block_bounds=([(0, 100)], [(0, 7)]),
+        )
+        jobs = build_jobs(specs, settings)
+        assert [j["block_bounds"] for j in jobs] == [[(0.0, 100.0)], [(0.0, 7.0)]]
+
+    def test_default_blocks_are_not_all_identical(self):
+        """Four identical blocks would switch off the regime-change problem."""
+        blocks = ShowdownSettings().bounds_for_iteration(0)
+        assert len(set(blocks)) > 1, "the default schedule has nothing to detect"

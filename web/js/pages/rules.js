@@ -10,6 +10,34 @@ import { attachPayoffBench, renderPayoffBench } from "../payoff.js";
 import { revealAll, revealLines } from "../motion.js";
 import { VARIATION_META, enabledVariations, esc } from "../ui.js";
 
+// --- variations released later -------------------------------------------------
+//
+// `server/late_variations.js` is fetched from `/api/variations/late.js`, which
+// 404s until the admin switches variation 3 or 4 on. Until then the module is
+// absent, these helpers render nothing, and no worked example, observation row
+// or payoff figure for an unreleased variation reaches the page.
+
+let LATE = null;
+
+/** Called by `main.js` once the late module has been imported. */
+export function registerLateRules(module) {
+  LATE = module || null;
+}
+
+function lateObservations() {
+  return LATE?.OBSERVATIONS ?? [];
+}
+
+/** The worked-round capitals, plus any a released variation adds. */
+function lateCaps(row) {
+  return { ...row.caps, ...(LATE?.SAMPLE_123_CAPS?.[row.bot] ?? {}) };
+}
+
+function sampleFour(variations) {
+  if (!variations.includes(4) || !LATE?.SAMPLE_4) return "";
+  return LATE.renderSampleFour({ table, mono, dim });
+}
+
 const SECTIONS = [
   ["game", "The game"],
   ["capital", "Capital resets"],
@@ -34,25 +62,19 @@ const OBSERVATIONS = [
   ["Second-highest bid b₂ of the previous round", "second_highest_bid_last_round", [1, 2, 3, 4]],
   ["Your own bid, rank and payoff last round", "my_last_bid · my_last_rank · my_last_payoff", [1, 2, 3, 4]],
   ["Realised X of the previous round", "max_value_last_round", [2, 3, 4]],
-  ["Third, fourth and fifth highest bids of the previous round", "top_bids_last_round", [4]],
+  // Rows that only an unreleased variation receives live in
+  // `server/late_variations.js` and are spliced in by `lateObservations()`.
 ];
 
-// §14, variations 1-3: three bots, capital 100 each, X = 60.
+// §14: three bots, capital 100 each. Values 30, 50, 60 so X = 60; bids 45, 55, 30.
+// A per-variation capital column is only rendered for a variation in play, so
+// `caps` never carries a figure for a variation the reader is not entitled to.
 const SAMPLE_123 = [
-  { bot: "Bot 1", strategy: "bids xᵢ + 15", x: 30, bid: 45, caps: { 1: "100", 2: "100", 3: "97.50" } },
-  { bot: "Bot 2", strategy: "bids xᵢ + 5", x: 50, bid: 55, caps: { 1: "95", 2: "105", 3: "105" } },
-  { bot: "Bot 3", strategy: "bids 0.5 · xᵢ", x: 60, bid: 30, caps: { 1: "100", 2: "100", 3: "100" } },
+  { bot: "Bot 1", strategy: "bids xᵢ + 15", x: 30, bid: 45, caps: { 1: "100", 2: "100" } },
+  { bot: "Bot 2", strategy: "bids xᵢ + 5", x: 50, bid: 55, caps: { 1: "95", 2: "105" } },
+  { bot: "Bot 3", strategy: "bids 0.5 · xᵢ", x: 60, bid: 30, caps: { 1: "100", 2: "100" } },
 ];
 
-// §14, variation 4: six bots, capital 100 each, X = 60, b₁ = 58 ≤ X.
-const SAMPLE_4 = [
-  { bot: "Bot 6", x: 55, bid: 58, rank: "1", payoff: "X − b₂ = +5", cap: "105" },
-  { bot: "Bot 2", x: 50, bid: 55, rank: "2", payoff: "X − b₁ = +2", cap: "102" },
-  { bot: "Bot 5", x: 45, bid: 50, rank: "3", payoff: "−0.5 × 7 = −3.5", cap: "96.5" },
-  { bot: "Bot 1", x: 30, bid: 45, rank: "4", payoff: "−0.3 × 7 = −2.1", cap: "97.9" },
-  { bot: "Bot 4", x: 20, bid: 40, rank: "5", payoff: "−0.2 × 7 = −1.4", cap: "98.6" },
-  { bot: "Bot 3", x: 60, bid: 30, rank: "6", payoff: "0", cap: "100" },
-];
 
 const RESOURCES = [
   ["Random variables", "https://www.investopedia.com/terms/r/random-variable.asp", "Investopedia"],
@@ -129,6 +151,8 @@ export async function renderRules(app) {
   const paint = () => {
     const state = store.state || {};
     const variations = enabledVariations(state);
+    // V4's worked example needs six bots, so it gets its own table below.
+    const threeBotColumns = variations.filter((id) => id !== 4);
     const hidden = [1, 2, 3, 4].filter((id) => !variations.includes(id));
     const rounds = state.num_rounds ?? 2000;
     const blockSize = state.block_size ?? 500;
@@ -279,17 +303,19 @@ export async function renderRules(app) {
             </p>
             <div class="mt-6" data-fade>
               ${table(
-                ["Observation", "Key", "V1", "V2", "V3", "V4"],
-                OBSERVATIONS.map(([label, key, ids]) => [
-                  dim(label),
-                  mono(key),
-                  ...[1, 2, 3, 4].map((id) =>
-                    ids.includes(id)
-                      ? '<span class="text-jade">✓</span>'
-                      : '<span class="text-ink-3">—</span>'
-                  ),
-                ]),
-                { align: [null, null, "right", "right", "right", "right"] }
+                ["Observation", "Key", ...variations.map((id) => `V${id}`)],
+                [...OBSERVATIONS, ...lateObservations()]
+                  .filter(([, , ids]) => ids.some((id) => variations.includes(id)))
+                  .map(([label, key, ids]) => [
+                    dim(label),
+                    mono(key),
+                    ...variations.map((id) =>
+                      ids.includes(id)
+                        ? '<span class="text-jade">✓</span>'
+                        : '<span class="text-ink-3">—</span>'
+                    ),
+                  ]),
+                { align: [null, null, ...variations.map(() => "right")] }
               )}
             </div>
             <ul class="mt-8 space-y-3 text-sm leading-relaxed text-ink-2" data-fade>
@@ -402,47 +428,23 @@ export async function renderRules(app) {
             ${heading("worked", "08", "Worked rounds")}
             <p class="mt-8 max-w-2xl text-sm leading-relaxed text-ink-2" data-fade>
               Three bots, 100 capital each. Values 30, 50 and 60, so X = 60; bids 45, 55 and 30. Bot 2
-              wins and Bot 1 is the runner-up. The same round settles differently under each of the
-              first three variations:
+              wins and Bot 1 is the runner-up. The same round settles differently under each
+              variation:
             </p>
             <div class="mt-6" data-fade>
               ${table(
-                ["Bot", "Strategy", "Value xᵢ", "Bid", "V1 capital", "V2 capital", "V3 capital"],
+                ["Bot", "Strategy", "Value xᵢ", "Bid", ...threeBotColumns.map((id) => `V${id} capital`)],
                 SAMPLE_123.map((row) => [
                   `<b>${row.bot}</b>`,
                   dim(row.strategy),
                   mono(row.x),
                   mono(row.bid),
-                  mono(row.caps[1]),
-                  mono(row.caps[2]),
-                  mono(row.caps[3]),
+                  ...threeBotColumns.map((id) => mono(lateCaps(row)[id])),
                 ])
               )}
             </div>
 
-            <p class="mt-10 max-w-2xl text-sm leading-relaxed text-ink-2" data-fade>
-              Variation 4 needs six bots to show its shape. Values 30, 50, 60, 20, 45, 55 so X = 60;
-              bids 45, 55, 30, 40, 50, 58. Since b₁ = 58 ≤ X, the top two are paid and ranks 3 to 5
-              fund them — T = 5 + 2 = 7. Note that Bot 3, which bid the <i>least</i>, ends the round
-              better off than Bots 1, 4 and 5.
-            </p>
-            <div class="mt-6" data-fade>
-              ${table(
-                ["Bot", "Value xᵢ", "Bid", "Rank", "Payoff", "Capital"],
-                SAMPLE_4.map((row) => [
-                  `<b>${row.bot}</b>`,
-                  mono(row.x),
-                  mono(row.bid),
-                  mono(row.rank),
-                  dim(row.payoff),
-                  mono(row.cap),
-                ])
-              )}
-            </div>
-            <p class="mt-6 text-sm leading-relaxed text-ink-2" data-fade>
-              Had Bot 6 bid 62 &gt; X instead, it alone would have taken 60 − 62 = −2 and every other
-              bot would have received zero. No penalties are collected in that branch.
-            </p>
+            ${sampleFour(variations)}
           </div>
 
           <div data-reveal>

@@ -112,8 +112,19 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "jitter_lo": -10.0,
     "jitter_hi": 10.0,
     "floor_fraction": 0.05,
-    # Never leaves the server.
-    "block_bounds": [[0.0, 100.0], [0.0, 100.0], [0.0, 100.0], [0.0, 100.0]],
+    # Never leaves the server. Either one schedule of four blocks (reused by
+    # every iteration) or one schedule per iteration — see
+    # `src.auction.distributions.normalise_block_bounds`.
+    #
+    # These four differ in BOTH scale and width on purpose. Four identical
+    # blocks would mean there is no regime change to detect, which switches off
+    # the whole point of the block structure. Replace them with the real hidden
+    # values from the admin console before the first scored auction.
+    "block_bounds": [
+        [[0.0, 100.0], [40.0, 60.0], [0.0, 400.0], [5.0, 25.0]],
+        [[10.0, 30.0], [0.0, 250.0], [60.0, 90.0], [0.0, 50.0]],
+        [[0.0, 75.0], [100.0, 500.0], [20.0, 40.0], [0.0, 150.0]],
+    ],
     "seed": 20260916,
     # Sandbox and throughput.
     "workers": 4,

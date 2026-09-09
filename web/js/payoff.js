@@ -6,8 +6,8 @@
 // worth keeping in step if the engine ever changes.
 //
 // The model is deliberately two-sided: you bid b, your best rival bids r, and
-// everyone else is below both. That is the smallest setup in which variation 4
-// says anything interesting, because V4 pays rank one and rank two differently.
+// everyone else is below both. That is the smallest setup that distinguishes
+// rank one from rank two, which some variations pay differently.
 
 import { VARIATION_META, clamp, esc, signed } from "./ui.js";
 
@@ -60,8 +60,8 @@ export function renderPayoffBench(variations, _state) {
         <div class="divide-y divide-line" data-bench-rows>
           ${variations.map(benchRow).join("")}
           <p class="p-6 font-mono text-[11px] leading-relaxed text-ink-3 md:p-8">
-            A bid above your own capital is filed as a zero. In variations 1 and 2 tied top bids
-            all win in full; in 3 and 4 ties are broken uniformly at random.
+            A bid above your own capital is filed as a zero. Tied top bids all win in full,
+            and each collects the whole payoff.
           </p>
         </div>
       </div>
@@ -112,30 +112,32 @@ function evaluate(id, { x, bid, rival, max }) {
       : { value: 0, formula: "—", note: "rank 2 scores nothing in this variation" };
   }
 
-  if (id === 3) {
-    if (won) {
-      return { value: surplus, formula: `${max.toFixed(1)} − ${bid.toFixed(1)}`,
-               note: `the runner-up pays ${signed(-0.5 * Math.max(0, surplus))}` };
-    }
-    const penalty = -0.5 * Math.max(0, surplus);
-    return { value: penalty, formula: `−0.5 × (${max.toFixed(1)} − ${b1.toFixed(1)})`,
-             note: penalty === 0
-               ? "the winner overpaid, so second place pays nothing"
-               : "second place funds half the winner's surplus" };
-  }
+  // Variations 3 and 4 are priced by `server/late_variations.js`, which only
+  // exists on the wire once they are released. Until then this is unreachable:
+  // `renderPayoffBench` is handed the enabled variations, so no row for 3 or 4
+  // is ever drawn. The guard is here for the moment between the state arriving
+  // and the module finishing its import.
+  const late = lateEvaluate(id, { x, bid, rival, max });
+  if (late) return late;
+  return { value: 0, formula: "—", note: "not released yet" };
+}
 
-  // Variation 4.
-  if (b1 > max) {
-    return won
-      ? { value: max - bid, formula: `${max.toFixed(1)} − ${bid.toFixed(1)}`,
-          note: "b₁ > X, so the winner eats the loss alone and no penalties are collected" }
-      : { value: 0, formula: "—", note: "b₁ > X, so nobody but the winner is touched" };
+// --- variations released later -------------------------------------------------
+
+let _lateEvaluate = null;
+
+/** Install the payoff function for variations 3 and 4. See `main.js`. */
+export function registerLatePayoff(fn) {
+  _lateEvaluate = typeof fn === "function" ? fn : null;
+}
+
+function lateEvaluate(id, state) {
+  if (!_lateEvaluate) return null;
+  try {
+    return _lateEvaluate(id, state);
+  } catch {
+    return null;
   }
-  return won
-    ? { value: max - b2, formula: `${max.toFixed(1)} − ${b2.toFixed(1)}`,
-        note: "rank 1 pays the second price, funded by ranks 3–5" }
-    : { value: max - b1, formula: `${max.toFixed(1)} − ${b1.toFixed(1)}`,
-        note: "rank 2 is paid too — it is rank 3 that you do not want to be" };
 }
 
 /** Wire a rendered bench. Returns a teardown function. */

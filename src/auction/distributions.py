@@ -11,6 +11,8 @@ called once per round in round order.
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 
 from .config import BLOCK_SIZE
@@ -64,3 +66,58 @@ class FixedSampler:
                 f"round {round_idx}: expected {n_players} values, got {len(v)}"
             )
         return v
+
+
+def normalise_block_bounds(value, *, num_blocks: int | None = None):
+    """Coerce admin-supplied block bounds into ``[iteration][block] -> (lo, hi)``.
+
+    Two shapes are accepted, because the tournament needs both:
+
+    * ``[(lo, hi), ...]`` — one schedule of blocks, reused by every iteration.
+      This is what a single game takes, and what the engine tests pin against.
+    * ``[[(lo, hi), ...], ...]`` — a schedule per iteration, so iteration 2 faces
+      genuinely different hidden distributions from iteration 1 rather than the
+      same ones under a fresh seed (problem statement §9).
+
+    Both come back in the nested form. Raises ``ValueError`` with a message fit
+    to show an admin, since this is reachable from the console.
+    """
+    if not isinstance(value, (list, tuple)) or not value:
+        raise ValueError("block bounds must be a non-empty list")
+
+    def pair(item, where: str) -> tuple[float, float]:
+        if not isinstance(item, (list, tuple)) or len(item) != 2:
+            raise ValueError(f"{where}: each block must be a [min, max] pair")
+        try:
+            lo, hi = float(item[0]), float(item[1])
+        except (TypeError, ValueError):
+            raise ValueError(f"{where}: block bounds must be numbers") from None
+        if not (math.isfinite(lo) and math.isfinite(hi)):
+            raise ValueError(f"{where}: block bounds must be finite")
+        if hi <= lo:
+            raise ValueError(f"{where}: max ({hi}) must be greater than min ({lo})")
+        if hi <= 0:
+            raise ValueError(
+                f"{where}: max must be positive — it is the divisor in the "
+                "normalised profit, and the scale of the capital draw"
+            )
+        return (lo, hi)
+
+    first = value[0]
+    nested = isinstance(first, (list, tuple)) and first and isinstance(
+        first[0], (list, tuple)
+    )
+    schedules = list(value) if nested else [value]
+
+    out = []
+    for i, schedule in enumerate(schedules):
+        if not isinstance(schedule, (list, tuple)) or not schedule:
+            raise ValueError(f"iteration {i + 1}: needs at least one block")
+        blocks = [pair(item, f"iteration {i + 1}, block {j + 1}")
+                  for j, item in enumerate(schedule)]
+        if num_blocks is not None and len(blocks) != num_blocks:
+            raise ValueError(
+                f"iteration {i + 1}: expected {num_blocks} blocks, got {len(blocks)}"
+            )
+        out.append(blocks)
+    return out

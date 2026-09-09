@@ -368,10 +368,11 @@ export async function renderHome(app) {
         ${
           hidden.length
             ? `<p class="mt-8 border-l-2 border-line-2 pl-5 text-sm leading-relaxed text-ink-3" data-fade>
-                 ${esc(hidden.map((id) => `V${id} ${VARIATION_META[id].name}`).join(", "))}
-                 ${hidden.length === 1 ? "is" : "are"} not released yet. Variations 3 and 4 open after
-                 mock auction 1; until then files for ${hidden.length === 1 ? "it" : "them"} are not
-                 accepted and ${hidden.length === 1 ? "it does" : "they do"} not appear on the board.
+                 ${esc(hidden.map((id) => `Variation ${id}`).join(" and "))}
+                 ${hidden.length === 1 ? "is" : "are"} not released yet — the rules are published when
+                 ${hidden.length === 1 ? "it opens" : "they open"}, after mock auction 1. Until then
+                 files for ${hidden.length === 1 ? "it" : "them"} are not accepted and
+                 ${hidden.length === 1 ? "it does" : "they do"} not appear on the board.
                </p>`
             : ""
         }

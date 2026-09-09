@@ -15,14 +15,8 @@ BLOCK_SIZE = 500
 
 NUM_BLOCKS = NUM_ROUNDS // BLOCK_SIZE  # 4
 
-HISTORY_WINDOW = 100
-"""Each round, bots see bid history from the previous HISTORY_WINDOW rounds."""
-
 GROUP_SIZE = 20
 """Bots are evaluated in randomly-drawn groups of this size."""
-
-EVAL_REPEATS = 3
-"""Qualification iterations: the whole field is regrouped and replayed this often."""
 
 QUALIFICATION_ITERATIONS = 3
 """Iterations 1-3 (§9). Two random, one strength-balanced by cumulative points."""
@@ -45,8 +39,12 @@ arithmetic without depending on a capital draw."""
 # --- Engine behaviour (our decisions — keep in sync with docs/bot_interface.md) -
 
 ELIMINATION_CAPITAL = 0.0
-"""A bot with capital <= ELIMINATION_CAPITAL is out for the rest of the game.
-TODO(0.B/1.B): confirm exact semantics ('<= 0' vs 'cannot afford any positive bid')."""
+"""A bot with capital <= ELIMINATION_CAPITAL sits out the rest of its BLOCK.
+
+The problem statement says "once a bot's capital hits 0 it stops participating",
+so the threshold is the literal zero rather than "cannot afford a positive bid".
+Bankruptcy is scoped to the block: the next boundary redraws capital and the bot
+returns."""
 
 TIE_EPSILON = 1e-9
 """Bids within TIE_EPSILON of the max are treated as tied (all such bots win)."""

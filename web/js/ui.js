@@ -139,50 +139,57 @@ export const VARIATION_META = {
       "Tied top bids all win, and each collects the full payoff.",
     ],
   },
+  // Variations 3 and 4 carry style only until they are released. Their names,
+  // formulas and rules live in `server/late_variations.js`, which is served from
+  // `/api/variations/late.js` and 404s while they are switched off — so nothing
+  // about them reaches a browser before mock auction 1. `registerLateVariation`
+  // fills these in when that module lands.
   3: {
     index: "03",
-    name: "Runner-up Penalty",
-    kind: "common value",
-    formula: "X − b₁ · 2nd pays ½",
+    name: "Variation 3",
+    kind: "",
+    formula: "",
     ink: "text-amber",
     edge: "border-amber",
     rule: "bg-amber",
     swatch: "--color-amber",
-    short: "Second place is punished.",
-    detail:
-      "The same prize as variation 2, except the runner-up hands back half of what the winner " +
-      "earned. Coming close is now actively expensive, which changes what a safe bid even means.",
-    rules: [
-      "The winner's payoff is <b>X − b₁</b>, exactly as in variation 2.",
-      "The second-highest bidder pays <b>−0.5 × (X − b₁)</b>.",
-      "If X − b₁ is negative the runner-up pays nothing — the penalty never becomes a reward.",
-      "Ranks must be distinct here, so ties are broken uniformly at random.",
-    ],
+    short: "",
+    detail: "",
+    rules: [],
+    sealed: true,
   },
   4: {
     index: "04",
-    name: "Funded Second Price",
-    kind: "top two, ranks 3–5 pay",
-    formula: "X − b₂ · X − b₁",
+    name: "Variation 4",
+    kind: "",
+    formula: "",
     ink: "text-iris",
     edge: "border-iris",
     rule: "bg-iris",
     swatch: "--color-iris",
-    short: "The top two are paid by ranks three to five.",
-    detail:
-      "Rank one takes X − b₂ and rank two takes X − b₁, funded in shares of 0.5, 0.3 and 0.2 by " +
-      "ranks three, four and five. Being third is strictly worse than being sixth: there is no " +
-      "safe spot just under the money.",
-    rules: [
-      "If <b>b₁ ≤ X</b>: rank 1 takes <b>X − b₂</b>, rank 2 takes <b>X − b₁</b>.",
-      "Ranks 3, 4 and 5 pay 0.5, 0.3 and 0.2 of the total the top two earned — the round is exactly zero-sum.",
-      "Fewer than five active players: the shares renormalise over the ranks that exist. Two or fewer: no penalty.",
-      "If <b>b₁ > X</b>: the highest bidder alone takes X − b₁, a loss, and nobody else is touched.",
-    ],
+    short: "",
+    detail: "",
+    rules: [],
+    sealed: true,
   },
 };
 
 export const ALL_VARIATIONS = [1, 2, 3, 4];
+
+/**
+ * Fill in a variation whose copy arrived from `/api/variations/late.js`.
+ *
+ * Mutates the entry in place rather than replacing it, so the eight modules
+ * that already hold a reference to `VARIATION_META` pick the copy up without
+ * re-importing anything. `sealed` is cleared, which is how a caller tells the
+ * difference between "not released" and "released, copy loaded".
+ */
+export function registerLateVariation(id, meta) {
+  const target = VARIATION_META[id];
+  if (!target || !meta) return;
+  Object.assign(target, meta, { sealed: false });
+}
+
 
 /**
  * The variations the admin currently has switched on.

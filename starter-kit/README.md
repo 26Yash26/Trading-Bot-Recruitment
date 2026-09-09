@@ -1,98 +1,115 @@
 # Trading Bot Competition — starter kit
 
-Everything you need to write, test and submit a bot for the Quant Guild
-recruitment auction.
+Everything you need to write, test and submit a bot.
 
 ```
 starter-kit/
-├── Template.py            ← the only file you edit
-├── sample_bots/           the three bots from the problem statement
-├── auction_reference/     a read-only copy of the real engine
-└── README.md              this file
+├── Template.py       ← copy this, edit this, submit this
+├── local_test.py     a rough local runner, so you can check it works
+├── sample_bots/      the three bots from the problem statement
+└── README.md         this file
 ```
+
+Read the problem statement first. This file only explains the code; the rules,
+the scoring and the timeline are in the PDF and on the competition site.
+
+> **Variations 1 and 2 only.** Variations 3 and 4 are released after mock
+> auction 1. Nothing about them is in this kit, and the site will not accept a
+> `_3.py` or `_4.py` file until they open.
 
 ---
 
 ## 1. Set up
 
-You need Python 3.10 or newer.
+Python 3.10 or newer. Nothing to install — `local_test.py` uses only the
+standard library.
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate      # Windows: .venv\Scripts\activate
-pip install numpy pandas
+python --version
 ```
+
+You may use any pip-installable library in your actual bot (numpy, scipy,
+whatever). Just list what you used in your report.
 
 ## 2. Write your bot
 
-Copy `Template.py` to `<YourRollNo>_<variation>.py` — for example
-`ME24B152_1.py` for variation 1 — and fill in `get_bid`.
+Copy `Template.py` to `<YourRollNo>_<variation>.py` — `ME24B152_1.py` for
+variation 1 — and fill in `get_bid`.
 
 ```python
 class Bot:
     def __init__(self, config):
-        """Called once, before round 0."""
-        self.max_bid = config["max_bid"]
+        """Called once, before round 1."""
+        self.id = config["player_id"]
 
     def get_bid(self, obs):
         """Called once per round. Return a number."""
-        return min(0.5 * obs["x"], obs["max_bid"], obs["capital"])
+        return min(0.5 * obs["x"], obs["capital"])
 ```
 
-The class **must** be called `Bot` and `get_bid` **must** return a real number.
+The class **must** be called `Bot`, and `get_bid` **must** return a real number.
 Everything else is yours.
 
-### What you are given
+State you put on `self` survives all 2000 rounds. It is deliberately **not**
+cleared at a block boundary — noticing the boundary is part of the problem.
 
-`config`, once, at construction:
-
-| key | meaning |
-|---|---|
-| `player_id` | your index in the group |
-| `variation` | 1, 2 or 3 |
-| `num_players` | players at the start |
-| `num_rounds` | 2000 |
-| `starting_capital` | what you begin with — it varies between runs |
-| `max_bid` | legal bids lie in `[0, max_bid]` |
-
-`obs`, every round:
+### `config` — handed to `__init__` once
 
 | key | meaning |
 |---|---|
-| `round` | 0-indexed round number |
-| `x` | **your** private value this round |
-| `capital` | what you have right now |
-| `num_players` | players still active |
-| `max_bid` | the bid ceiling |
-| `highest_bid_last_100` | highest single bid in the last ≤100 rounds |
-| `second_highest_bid_last_100` | second-highest over the same window |
-| `highest_bids` | per-round highest bid, oldest → newest |
-| `second_highest_bids` | per-round second-highest, aligned with the above |
+| `player_id` | your index in the group, stable for the whole game |
+| `variation` | `1` or `2` |
+| `num_players` | players in the group at the start |
+| `num_rounds` | `2000` |
+| `starting_capital` | your capital **for block 1 only** — it is redrawn at every boundary |
+| `max_bid` | your capital at construction; the live ceiling is `obs["max_bid"]` |
 
-You never see anyone else's `x`, and you never see the distribution it was
-drawn from. That distribution changes every 500 rounds.
+### `obs` — handed to `get_bid` every round
+
+This is the whole of it. There is nothing else.
+
+| key | type | V1 | V2 | meaning |
+|---|---|:-:|:-:|---|
+| `round` | `int` | ✓ | ✓ | 1-indexed round number, 1 … 2000 |
+| `x` | `float` | ✓ | ✓ | **your** private value this round |
+| `capital` | `float` | ✓ | ✓ | what you have right now |
+| `max_bid` | `float` | ✓ | ✓ | your legal ceiling — equal to `capital` |
+| `num_players` | `int` | ✓ | ✓ | players still solvent this round (nₜ) |
+| `highest_bid_last_round` | `float` | ✓ | ✓ | b₁ of the previous round |
+| `second_highest_bid_last_round` | `float` | ✓ | ✓ | b₂ of the previous round |
+| `my_last_bid` | `float` | ✓ | ✓ | what you bid last round |
+| `my_last_rank` | `int` | ✓ | ✓ | your rank last round; `1` means you won |
+| `my_last_payoff` | `float` | ✓ | ✓ | what that was worth |
+| `max_value_last_round` | `float` | — | ✓ | the realised X of the previous round |
+
+Everything is `0.0` in round 1, because nothing has happened yet.
+
+You are **never** told the hidden bounds, the block index, when a boundary
+happens, or any other player's value, capital or identity.
 
 ## 3. Test it locally
 
 ```bash
-python run_local.py --bot ME24B152_1.py --variation 1
+python local_test.py --bot ME24B152_1.py --variation 1
+python local_test.py --bot ME24B152_1.py --variation 1 --seed 7
 ```
 
-That plays your bot against the three sample bots for a full game and prints a
-capital curve and your net profit.
+It plays your bot against the three sample bots for a full game and prints your
+capital and normalised profit block by block.
 
-> The bounds used locally are a stand-in. The real ones are hidden and change
-> every 500 rounds, and starting capital is varied — a bot tuned to the local
-> defaults will not travel well.
+> **`local_test.py` is a rough stand-in, not the competition engine.** The
+> hidden bounds it uses are made up, they change with `--seed`, and they are not
+> the ones you will be scored on. You play three bots here and nineteen there.
+> A good number here means your bot *runs*; it does not mean your bot is good.
+> **Run several seeds** before you believe anything you see.
 
 ## 4. Submit
 
 Upload the file on the competition site. It is checked immediately:
 
-1. the filename matches your roll number and a valid variation,
+1. the filename matches your roll number and a variation that is currently open,
 2. the code passes a static policy check,
-3. it plays a short game against the sample bots without crashing, timing out,
-   or going broke.
+3. it plays a short game without crashing, timing out or going broke.
 
 You get the verdict on the page. Resubmit as often as you like — the newest
 accepted file per variation is the one that plays.
@@ -101,36 +118,53 @@ accepted file per variation is the one that plays.
 
 ## Rules your bot has to live with
 
-- **Under 1 second per round.** Exceed it and that round scores as a bid of 0,
-  and your bot takes no further part in that game.
-- **Under 100 MB.** Allocate past the sandbox ceiling and the process dies.
-- **No network, no filesystem, no subprocesses.** Submissions run with no
-  network namespace and a read-only filesystem. Imports are restricted to the
-  standard library's computational modules plus `numpy`, `pandas`, `scipy` and
-  `scikit-learn`. `eval`, `exec`, `open`, `getattr` and dunder attribute access
-  are rejected before your file ever runs.
-- **Bid legally.** A bid above your available capital is silently replaced with
-  0 for that round. `NaN`, infinity, negatives and non-numbers are treated the
-  same way. Bids above `max_bid` are clamped.
-- **Any pip library is allowed in principle** — but list what you use in your
-  report, and check it is on the allowlist above before you rely on it.
+- **Under 1 second per round.** Exceed it and that round is filed as a bid of 0.
+- **Under 100 MB.** Allocate past the ceiling and your process is killed.
+- **No network, no filesystem, no subprocesses**, and no poking at the
+  simulator's internals. Submissions run with no network access and a read-only
+  filesystem. `eval`, `exec`, `open` and dunder attribute access are rejected
+  before your file is ever imported. Doing any of this is a disqualification,
+  not a warning.
+- **Bid legally.** A bid above your capital, below zero, `NaN`, infinite, or not
+  a number at all is replaced with **0** for that round. So is failing to return
+  in time. The engine will not clamp for you — clamp it yourself:
 
-## The three variations
+  ```python
+  return max(0.0, min(bid, obs["capital"]))
+  ```
 
-Write one file per variation. You may enter any subset.
+- **Bankruptcy is per block.** Hit zero capital and you sit out the rest of
+  *that block*, then come back at the next boundary on a fresh draw. You forfeit
+  the remainder of the block, which is expensive — survival is scored.
 
-| | Winner's payoff | Also |
+## The two variations
+
+Write one file per variation. You may enter either, or both.
+
+| | Winner's payoff | Everyone else |
 |---|---|---|
-| **V1** | `xᵢ − bid` (your own value) | — |
-| **V2** | `X − bid` where `X = max(x)` over everyone | — |
-| **V3** | `X − bid` | the second-highest bidder pays `−0.5 × (X − bid)`, or 0 if `X − bid < 0` |
+| **V1** — private value, first price | `xᵢ − b₁`, using the **winner's own value** | zero |
+| **V2** — common value, first price | `X − b₁`, where `X = max xᵢ` over the **active** players | zero |
 
-Highest bid wins. If several bots tie at the top, all of them win and each
+Highest bid wins. If several bots tie at the top, **all** of them win and each
 collects the full payoff.
 
-## Reading the engine
+In V2, `X` is the maximum over the players active *that round* — bankrupt bots
+contribute no value. So as `nₜ` falls, `X` falls in expectation, and you are
+told `nₜ` every round for exactly that reason.
 
-`auction_reference/` is a copy of the code that actually runs the auction —
-`engine.py` is the round loop, `variations.py` the payoff rules. It is there so
-you can check exactly what happens; editing it changes nothing about how your
-submission is scored.
+## What actually gets you points
+
+Not raw profit. Per block, your profit is divided by that block's hidden
+maximum value, and then standardised against the other nineteen bots in your
+group. Details are in the problem statement — but the practical consequences
+are worth stating plainly:
+
+- **A block is scored on its own.** Capital does not carry across a boundary.
+  Four blocks, four independent tests.
+- **Your capital is redrawn every block**, anywhere from roughly half to
+  two-and-a-half times the hidden maximum. A bot that plays the same way on a
+  thin bankroll as on a fat one is being measured, and it will show.
+- **Consistency beats one good block.** Your spread across the four blocks and
+  your worst block are both reported.
+- **Bankruptcy is heavily penalised.** You forfeit the rest of the block.

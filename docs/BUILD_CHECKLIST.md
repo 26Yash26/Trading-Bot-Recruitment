@@ -7,7 +7,7 @@ Working doc for building the competition infra. Tick items off in PRs (`- [x]`).
 - **PS launch:** 09 Sep 2026 (Wed)
 - **Mock auction:** ~20 Sep 2026
 - **Participant deadline:** 23 Sep 2026, 23:59
-- **Final evaluation:** 24 Sep 2026
+- **Final submission deadline:** Wed 16 Sep 2026, 23:59 IST
 
 ---
 
@@ -233,7 +233,7 @@ All of Phase 0.F is in [`docs/RUNBOOK.md`](RUNBOOK.md) as copy-pasteable command
 - [ ] Triage bots that crash / time out / hog memory → notify participants
 - [ ] File issues for anything the real bots expose; fix before final
 
-## Phase 5 — Final evaluation (24 Sep)
+## Phase 5 — Final evaluation (16 Sep, after the deadline)
 - [ ] Close submissions from the admin page
 - [ ] Full run: 3× grouped sim × capital sweep, all 3 variations, 2000 rounds
 - [ ] Final leaderboard + per-participant reports

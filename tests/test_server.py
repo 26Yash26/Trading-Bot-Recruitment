@@ -254,3 +254,67 @@ def test_cross_origin_state_change_is_rejected(as_admin):
     )
     assert response.status_code == 403
     assert store.get_settings()["interval_minutes"] != 5
+
+
+# --- the hidden bounds are the one setting that can break every game ------------
+
+
+class TestBlockBoundsValidation:
+    """`block_bounds` is typed into the console minutes before a run.
+
+    M_b divides the normalised profit and scales every capital draw, so a zero,
+    a negative or an inverted pair does not degrade the showdown — it takes the
+    whole thing down. It used to be stored with no checks at all.
+    """
+
+    def _patch(self, as_admin, bounds):
+        return as_admin.patch(
+            "/api/admin/settings", json={"block_bounds": bounds}, headers=ORIGIN
+        )
+
+    def test_flat_schedule_is_accepted_and_nested(self, as_admin):
+        response = self._patch(as_admin, [[0, 100], [40, 60], [0, 400], [5, 25]])
+        assert response.status_code == 200
+        assert response.json()["settings"]["block_bounds"] == [
+            [[0.0, 100.0], [40.0, 60.0], [0.0, 400.0], [5.0, 25.0]]
+        ]
+
+    def test_per_iteration_schedules_are_accepted(self, as_admin):
+        bounds = [[[0, 100], [40, 60]], [[10, 30], [0, 250]]]
+        response = self._patch(as_admin, bounds)
+        assert response.status_code == 200
+        assert len(response.json()["settings"]["block_bounds"]) == 2
+
+    @pytest.mark.parametrize(
+        "bad",
+        [
+            [],
+            [[100, 0]],
+            [[5, 5]],
+            [[-50, -10]],
+            [["a", "b"]],
+            [[0, 100, 7]],
+            "not a list",
+        ],
+    )
+    def test_bad_bounds_are_refused_with_a_readable_message(self, as_admin, bad):
+        response = self._patch(as_admin, bad)
+        assert response.status_code == 400
+        assert response.json()["detail"]
+
+    def test_a_refused_patch_does_not_change_the_stored_bounds(self, as_admin):
+        good = [[0, 100], [40, 60], [0, 400], [5, 25]]
+        self._patch(as_admin, good)
+        before = store.get_settings()["block_bounds"]
+        assert self._patch(as_admin, [[9, 1]]).status_code == 400
+        assert store.get_settings()["block_bounds"] == before
+
+    def test_bounds_never_reach_the_browser(self, client, as_admin):
+        """They are the answer to the whole problem, so `/api/state` withholds
+        them (`store.SECRET_SETTING_KEYS`)."""
+        before = store.get_settings()["block_bounds"]
+        try:
+            self._patch(as_admin, [[0, 137.5], [40, 60], [0, 400], [5, 25]])
+            assert "137.5" not in client.get("/api/state").text
+        finally:
+            store.update_settings({"block_bounds": before})

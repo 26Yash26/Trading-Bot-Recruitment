@@ -1,14 +1,14 @@
 """The showdown: every submitted bot, every enabled variation, ranked.
 
 This is what the 2-hourly scheduler calls, and the same code path the final
-evaluation on 24 Sep uses — only the settings differ. Following the problem
+evaluation on 16 Sep uses — only the settings differ. Following the problem
 statement §8: split into random groups, play a full game per group, repeat with
 fresh seeds and fresh groups, then aggregate.
 
 Groups are independent games, so they run in parallel across processes. The
 wall-clock cost is roughly::
 
-    variations x repeats x ceil(n/group_size) x len(capitals) x ~15 s / workers
+    variations x iterations x ceil(n/group_size) x ~15 s / workers
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from pathlib import Path
 
 from sandbox.runner import SandboxLimits
 from src.auction.capital import CapitalDraw
+from src.auction.distributions import normalise_block_bounds
 
 from .simulate import BotOutcome, BotSpec, make_groups, play_group
 
@@ -45,9 +46,14 @@ class ShowdownSettings:
     grouping: str = "random"
     finals_size: int = 20
     capital: CapitalDraw = field(default_factory=CapitalDraw)
-    block_bounds: tuple[tuple[float, float], ...] = (
-        (0.0, 100.0), (0.0, 100.0), (0.0, 100.0), (0.0, 100.0),
+    block_bounds: tuple = (
+        # Four blocks that are genuinely different in scale AND in width. If all
+        # four matched, there would be no regime to detect and the whole point of
+        # the block structure would be switched off.
+        (0.0, 100.0), (40.0, 60.0), (0.0, 400.0), (5.0, 25.0),
     )
+    """Hidden value bounds. Either one schedule of blocks, reused by every
+    iteration, or one schedule per iteration — see ``bounds_for_iteration``."""
     seed: int = 20260916
     workers: int = 4
     round_timeout: float = 1.0
@@ -56,6 +62,18 @@ class ShowdownSettings:
     @property
     def num_blocks(self) -> int:
         return max(1, math.ceil(self.num_rounds / max(1, self.block_size)))
+
+    def bounds_for_iteration(self, iteration: int) -> list[tuple[float, float]]:
+        """The block schedule iteration ``iteration`` (0-based) plays.
+
+        Problem statement §9 wants iteration 2 to be a genuinely fresh draw —
+        "different value distributions", not the same ones under a new seed. So
+        the admin may supply one schedule per iteration. Supplying a single
+        schedule keeps the old behaviour, and a short list cycles, so three
+        schedules across five iterations is a legal thing to ask for.
+        """
+        schedules = normalise_block_bounds(self.block_bounds)
+        return schedules[iteration % len(schedules)]
 
     def limits(self) -> SandboxLimits:
         return SandboxLimits(round_timeout=self.round_timeout, mem_mb=self.mem_mb)
@@ -160,7 +178,7 @@ def build_jobs(
                     {
                         "specs": [(s.key, str(s.path)) for s in group],
                         "variation": variation,
-                        "block_bounds": [tuple(b) for b in settings.block_bounds],
+                        "block_bounds": settings.bounds_for_iteration(iteration),
                         "seed": settings.seed + iteration * 97 + group_idx * 13 + variation,
                         "num_rounds": settings.num_rounds,
                         "block_size": settings.block_size,

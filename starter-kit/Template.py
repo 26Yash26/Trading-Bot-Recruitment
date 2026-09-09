@@ -1,10 +1,13 @@
 """
 Trading Bot Competition - submission template.
 
-Copy this file to  <YourRollNo>_<variation>.py  (e.g. OB24C420_1.py) and fill in
+Copy this file to  <YourRollNo>_<variation>.py  (e.g. ME24B152_1.py) and fill in
 `get_bid`. This is the ONLY file you submit. Do not rename the class.
 
-Full spec: docs/bot_interface.md  |  Test locally:  python run_local.py --bot <file> --variation 1
+Variations 1 and 2 only. Variations 3 and 4 are released later, with their own
+template.
+
+Test locally:  python local_test.py --bot ME24B152_1.py --variation 1
 """
 
 
@@ -15,15 +18,15 @@ class Bot:
 
         config = {
             "player_id":        int,    # your index in the group
-            "variation":        int,    # 1, 2, 3 or 4
+            "variation":        int,    # 1 or 2
             "num_players":      int,    # players at the start
             "num_rounds":       int,    # 2000
-            "starting_capital": float,  # your capital for block 1 only
-            "max_bid":          float,  # historical; the real ceiling is your capital
+            "starting_capital": float,  # your capital for block 1 ONLY
+            "max_bid":          float,  # your capital at construction
         }
 
-        State you put on `self` survives the whole 2000 rounds. It is NOT cleared
-        at a block boundary, which is exactly what lets you detect one.
+        State you put on `self` survives the whole 2000 rounds. It is NOT
+        cleared at a block boundary, which is exactly what lets you detect one.
         """
         self.config = config
 
@@ -43,23 +46,20 @@ class Bot:
             "my_last_rank":                  int,    # 1 = you won it
             "my_last_payoff":                float,
 
-            # variations 2, 3 and 4 only:
+            # variation 2 only:
             "max_value_last_round":          float,  # the realised X of last round
-
-            # variation 4 only:
-            "top_bids_last_round":           list,   # [b1, b2, b3, b4, b5]
         }
 
         Everything is 0.0 in round 1, because nothing has happened yet.
 
         What the game does to you:
-          - your capital is REDRAWN at every block boundary (every 500 rounds) and
-            what you finished the previous block with does not carry over;
-          - the hidden value distribution changes at the same moment, and you are
-            not told when that is;
-          - bid > capital, bid < 0, NaN or no bid in time -> filed as 0;
-          - hit zero capital and you sit out the REST OF THAT BLOCK, then come back
-            on a fresh draw;
+          - your capital is REDRAWN at every block boundary (every 500 rounds),
+            and what you finished the previous block with does not carry over;
+          - the hidden value distribution changes at the same moment, and you
+            are not told when that is;
+          - bid > capital, bid < 0, NaN, or no bid in time -> filed as 0;
+          - hit zero capital and you sit out the REST OF THAT BLOCK, then come
+            back on a fresh draw;
           - keep this under ~1 second and ~100 MB.
         """
         x = obs["x"]

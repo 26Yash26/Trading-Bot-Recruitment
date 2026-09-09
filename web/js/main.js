@@ -3,7 +3,9 @@
 import { api, openStream } from "./api.js";
 import { serverNow, syncClock } from "./countdown.js";
 import { observeCounters, observeReveals, startCursor, startParallax } from "./motion.js";
-import { clockParts, esc, relativeTime, toast } from "./ui.js";
+import { clockParts, esc, registerLateVariation, relativeTime, toast } from "./ui.js";
+import { registerLatePayoff } from "./payoff.js";
+import { registerLateRules } from "./pages/rules.js";
 
 import { renderHome } from "./pages/home.js";
 import { renderLeaderboard } from "./pages/leaderboard.js";
@@ -330,6 +332,45 @@ function renderFooterStatus() {
     `last showdown ${state.last_showdown ? relativeTime(state.last_showdown.finished_at) : "never"}`;
 }
 
+// --- variations released later -------------------------------------------------
+
+// Variations 3 and 4 are not in the shipped bundle. Their names, rules, worked
+// example and payoff arithmetic live in `server/late_variations.js`, which
+// `/api/variations/late.js` refuses to serve until the admin switches one of
+// them on. So before mock auction 1 a participant reading the page source finds
+// nothing about them, and the moment the admin flips the switch the running
+// `state` event brings every open tab here without a reload.
+
+let lateLoaded = false;
+let lateLoading = null;
+
+function ensureLateVariations(state) {
+  if (lateLoaded || lateLoading) return lateLoading;
+  const variations = (state?.variations || []).map(Number);
+  if (!variations.some((id) => id === 3 || id === 4)) return null;
+
+  lateLoading = import("/api/variations/late.js")
+    .then((module) => {
+      Object.entries(module.META || {}).forEach(([id, meta]) =>
+        registerLateVariation(Number(id), meta)
+      );
+      registerLatePayoff(module.evaluate);
+      registerLateRules(module);
+      lateLoaded = true;
+      // The copy arrived after the page was drawn, so draw it again.
+      store.set({});
+    })
+    .catch((error) => {
+      // A 404 here is the normal state before release, not a fault.
+      console.debug("late variations not available", error);
+    })
+    .finally(() => {
+      lateLoading = null;
+    });
+
+  return lateLoading;
+}
+
 // --- live connection -----------------------------------------------------------
 
 let pollTimer = null;
@@ -339,6 +380,7 @@ async function refreshState() {
     const state = await api.state();
     syncClock(state.now);
     store.set({ state });
+    ensureLateVariations(state);
   } catch (error) {
     console.error("state refresh failed", error);
   }
@@ -373,6 +415,7 @@ function connectLive() {
     onState: (state) => {
       syncClock(state.now);
       store.set({ state });
+      ensureLateVariations(state);
     },
 
     onProgress: ({ done, total }) =>

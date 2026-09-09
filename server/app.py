@@ -26,6 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from harness.validate import ROLL_RE, parse_filename, validate
 from sandbox.runner import SandboxLimits, detect_isolation
 from src.auction.capital import CapitalDraw
+from src.auction.distributions import normalise_block_bounds
 from src.auction.variations import VARIATIONS
 
 from . import config, events, security, store
@@ -274,6 +275,46 @@ async def api_leaderboard_stream(request: Request):
     )
 
 
+# --- variations released later -------------------------------------------------
+
+LATE_VARIATIONS_JS = Path(__file__).resolve().parent / "late_variations.js"
+
+#: Variations whose rules are withheld from the browser until they are released.
+LATE_VARIATIONS = (3, 4)
+
+
+@app.get("/api/variations/late.js")
+def api_late_variations():
+    """The browser module describing variations 3 and 4.
+
+    Everything about them — names, rules, the worked example, the payoff
+    arithmetic behind the interactive bench — lives in this one file, which sits
+    under ``server/`` rather than ``web/`` so nginx will not serve it as a static
+    asset (``deploy/nginx.conf`` blocks the whole directory). It is handed out
+    only once the admin has switched one of them on.
+
+    Before that this is a 404, which is exactly what the front end expects: a
+    participant reading the page source on orientation night finds a dynamic
+    import that fails, and nothing else. Turning variation 3 on in the control
+    room publishes a ``state`` event, and every open tab imports this within the
+    second.
+    """
+    settings = store.get_settings()
+    in_play = {int(v) for v in settings.get("variations", [])}
+    if not in_play.intersection(LATE_VARIATIONS):
+        raise HTTPException(status_code=404, detail="Not found")
+    if not LATE_VARIATIONS_JS.is_file():
+        raise HTTPException(status_code=500, detail="late_variations.js is missing")
+
+    return FileResponse(
+        LATE_VARIATIONS_JS,
+        media_type="text/javascript",
+        # Released mid-competition, so it must not be cached as a 404 and must
+        # not be cached as content once a later variation changes.
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 # --- submitting ----------------------------------------------------------------
 
 
@@ -428,7 +469,7 @@ def admin_settings(admin: dict = Depends(require_admin)):
 
 
 def normalise_variations(value: object) -> list[int]:
-    """A non-empty subset of the three variations, in order.
+    """A non-empty subset of the four variations, in order.
 
     The switchboard in the admin console decides what the whole site shows, so
     an empty or malformed list here would leave participants with a page that
@@ -443,7 +484,7 @@ def normalise_variations(value: object) -> list[int]:
     if not chosen or any(item not in VARIATIONS for item in chosen):
         raise HTTPException(
             status_code=400,
-            detail="Pick at least one variation, out of 1, 2 and 3.",
+            detail="Pick at least one variation, out of 1, 2, 3 and 4.",
         )
     return chosen
 
@@ -457,6 +498,19 @@ async def admin_update_settings(request: Request, admin: dict = Depends(require_
 
     if "variations" in changes:
         changes["variations"] = normalise_variations(changes["variations"])
+
+    # The hidden bounds are the one setting that can break every game at once:
+    # M_b divides the normalised profit and scales the capital draw, so a zero,
+    # a negative or an inverted pair takes the whole showdown down. It is typed
+    # by hand into the console minutes before a run, so check it at the door.
+    if "block_bounds" in changes:
+        try:
+            changes["block_bounds"] = [
+                [list(pair) for pair in schedule]
+                for schedule in normalise_block_bounds(changes["block_bounds"])
+            ]
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
 
     settings = store.update_settings(changes)
     store.audit(admin["email"], "settings", ", ".join(sorted(changes)))

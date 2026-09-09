@@ -1,19 +1,46 @@
 """Template for `secret/config.py` (the real file is git-ignored).
 
-Copy to `config.py` and fill in real values before running the evaluation.
+Copy to `config.py` and fill in real values before running a scored auction.
+
+Nothing in here may ever reach a participant: these are the hidden bounds the
+bots are being tested against, and knowing them turns the whole problem into
+arithmetic. They are also settable from the admin console, which is the normal
+route — this file is the checked-in record of what was used, for the seed
+publication after the event.
 """
 
-# Hidden uniform bounds (lo, hi) for x_i, one pair per 500-round block.
-# NUM_BLOCKS == 4 for a 2000-round game.
+# Hidden uniform bounds (lo, hi) for x_i.
+#
+# Either one schedule of four blocks, reused by every iteration:
+#
+#     BLOCK_BOUNDS = [(0.0, 100.0), (40.0, 60.0), (0.0, 400.0), (5.0, 25.0)]
+#
+# or — preferred, and what the problem statement §9 promises — one schedule per
+# iteration, so iteration 2 is a genuinely fresh set of distributions rather than
+# the same ones under a new seed. Short lists cycle, so three schedules cover
+# five iterations.
+#
+# Make the four blocks differ in BOTH scale and width. Four similar blocks mean
+# there is no regime change to detect, which switches off the thing the block
+# structure exists to test.
 BLOCK_BOUNDS = [
-    (0.0, 100.0),   # rounds    0- 499
-    (0.0, 100.0),   # rounds  500- 999
-    (0.0, 100.0),   # rounds 1000-1499
-    (0.0, 100.0),   # rounds 1500-1999
+    # iteration 1                                  rounds 0-499, 500-999, 1000-1499, 1500-1999
+    [(0.0, 100.0), (40.0, 60.0), (0.0, 400.0), (5.0, 25.0)],
+    # iteration 2
+    [(10.0, 30.0), (0.0, 250.0), (60.0, 90.0), (0.0, 50.0)],
+    # iteration 3 (strength-balanced groups)
+    [(0.0, 75.0), (100.0, 500.0), (20.0, 40.0), (0.0, 150.0)],
+    # iterations 4 and 5 — the finals. Two fresh seeds, two fresh schedules.
+    [(0.0, 200.0), (30.0, 45.0), (0.0, 90.0), (150.0, 600.0)],
+    [(5.0, 15.0), (0.0, 320.0), (80.0, 120.0), (0.0, 60.0)],
 ]
 
-# Starting capitals to sweep for the robustness metric (PS §9).
-STARTING_CAPITALS = [100.0, 250.0, 1000.0]
+# Starting capital is NOT set here. It is redrawn per player per block from the
+# block's own hidden maximum -- kappa ~ U[0.5, 2.5], y = kappa * M_b,
+# u ~ U[-10, 10], C = max(y + u, 0.05 * M_b) -- and the multipliers are tunable
+# from the admin console (`kappa_lo`, `kappa_hi`, `jitter_lo`, `jitter_hi`,
+# `floor_fraction`). See `src/auction/capital.py`.
 
 # Master RNG seed. Per-run seeds are derived from this so runs are reproducible.
-MASTER_SEED = 20260923
+# Publish it after the event, with the bounds above, so results can be checked.
+MASTER_SEED = 20260916
