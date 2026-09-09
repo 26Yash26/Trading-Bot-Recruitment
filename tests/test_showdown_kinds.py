@@ -109,31 +109,84 @@ def test_a_practice_run_does_not_bury_the_mock_board(finished_showdowns):
     assert [r["key"] for r in rows] == ["BOTMOCK"]
 
 
-def test_migration_adds_kind_to_a_database_that_predates_it(tmp_path):
-    """The VM's database holds every real submission and is never recreated, so
-    a new column reaches it through `_migrate` or not at all."""
-    path = tmp_path / "old.db"
+#: The `showdowns` table exactly as it shipped before `kind` existed — the shape
+#: the VM's live database is in when a deploy carrying `kind` lands on it.
+PRE_KIND_SHOWDOWNS = """
+CREATE TABLE showdowns (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    started_at  REAL NOT NULL,
+    finished_at REAL,
+    games       INTEGER NOT NULL DEFAULT 0,
+    status      TEXT NOT NULL,
+    error       TEXT NOT NULL DEFAULT '',
+    settings    TEXT NOT NULL DEFAULT '{}'
+);
+INSERT INTO showdowns(started_at, finished_at, status) VALUES(1.0, 2.0, 'done');
+"""
+
+
+def _open_pre_kind_database(path):
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
-    conn.execute(
-        "CREATE TABLE showdowns (id INTEGER PRIMARY KEY AUTOINCREMENT, "
-        "started_at REAL NOT NULL, finished_at REAL, games INTEGER NOT NULL DEFAULT 0, "
-        "status TEXT NOT NULL, error TEXT NOT NULL DEFAULT '', "
-        "settings TEXT NOT NULL DEFAULT '{}')"
-    )
-    conn.execute("INSERT INTO showdowns(started_at, status) VALUES(1.0, 'done')")
+    conn.executescript(PRE_KIND_SHOWDOWNS)
     conn.commit()
+    return conn
 
+
+def test_startup_upgrades_a_database_that_predates_kind(tmp_path):
+    """The whole startup path, in the order `connect()` runs it, against a live-
+    shaped database.
+
+    This is the test that was missing, and it cost an outage. The `kind` index
+    was declared inside SCHEMA, and SCHEMA runs BEFORE `_migrate`. On a database
+    that already has the table, `CREATE TABLE IF NOT EXISTS` is a no-op, so the
+    column did not exist yet and `CREATE INDEX ... ON showdowns(kind, ...)` blew
+    up with "no such column: kind", aborting `executescript` and taking the API
+    down on deploy. Every test passed, because every test database is created
+    fresh — where the table is built WITH the column and the ordering never
+    matters. Only an upgraded database can catch it, so build one.
+    """
+    conn = _open_pre_kind_database(tmp_path / "old.db")
+
+    # Exactly what `store.connect()` does, in order.
+    conn.executescript(store.SCHEMA)
     store._migrate(conn)  # noqa: SLF001 - that is what is under test
     conn.commit()
 
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(showdowns)")}
     assert "kind" in columns
+    indexes = {row["name"] for row in conn.execute("PRAGMA index_list(showdowns)")}
+    assert "idx_showdowns_kind" in indexes, "the index never got created"
+
     row = conn.execute("SELECT kind FROM showdowns").fetchone()
     assert row["kind"] == "practice", "an existing run must not be mislabelled"
 
-    store._migrate(conn)  # noqa: SLF001 - and it must be idempotent
+    # Restarts re-run both, so both have to be idempotent.
+    conn.executescript(store.SCHEMA)
+    store._migrate(conn)  # noqa: SLF001
+    conn.commit()
     conn.close()
+
+
+def test_schema_alone_never_references_a_migrated_column(tmp_path):
+    """Belt and braces, and the rule stated as a test: SCHEMA must apply to an
+    old database on its own. Anything needing a migrated column goes in INDEXES.
+    """
+    conn = _open_pre_kind_database(tmp_path / "old2.db")
+    conn.executescript(store.SCHEMA)   # must not raise
+    conn.close()
+
+
+def test_every_migrated_column_is_actually_in_the_table_definition():
+    """`MIGRATIONS` upgrades old databases; `SCHEMA` builds new ones. If a column
+    is in one and not the other, fresh and upgraded deployments disagree."""
+    for table, column, _ in store.MIGRATIONS:
+        start = store.SCHEMA.index(f"CREATE TABLE IF NOT EXISTS {table}")
+        body = store.SCHEMA[start : store.SCHEMA.index(");", start)]
+        assert column in body, (
+            f"{table}.{column} is migrated onto old databases but missing from "
+            "SCHEMA, so a fresh deployment would never have it"
+        )
 
 
 # --- seeding reads the right board ---------------------------------------------

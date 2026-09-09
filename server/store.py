@@ -70,10 +70,11 @@ CREATE TABLE IF NOT EXISTS showdowns (
     status      TEXT NOT NULL,
     error       TEXT NOT NULL DEFAULT '',
     settings    TEXT NOT NULL DEFAULT '{}',
-    -- What this run was for. See `SHOWDOWN_KINDS`.
+    -- What this run was for. See `SHOWDOWN_KINDS`. Indexed in INDEXES below,
+    -- NOT here: on an upgraded database `CREATE TABLE IF NOT EXISTS` is a no-op,
+    -- so this column does not exist yet when SCHEMA runs.
     kind        TEXT NOT NULL DEFAULT 'practice'
 );
-CREATE INDEX IF NOT EXISTS idx_showdowns_kind ON showdowns(kind, status, finished_at);
 
 CREATE TABLE IF NOT EXISTS results (
     showdown_id INTEGER NOT NULL,
@@ -202,15 +203,31 @@ MIGRATIONS: tuple[tuple[str, str, str], ...] = (
     ("showdowns", "kind", "TEXT NOT NULL DEFAULT 'practice'"),
 )
 
+#: Indexes over columns that MIGRATIONS may have just added.
+#:
+#: These cannot live in ``SCHEMA``. On a database that already has the table,
+#: ``CREATE TABLE IF NOT EXISTS`` is a no-op, so the new column does not exist
+#: when ``SCHEMA`` is executed — and ``CREATE INDEX ... ON showdowns(kind, ...)``
+#: then fails with "no such column: kind", aborting the whole script and taking
+#: startup down. Only a *fresh* database survives that ordering, which is every
+#: database a test ever sees. Index after migrating, never before.
+INDEXES: tuple[str, ...] = (
+    "CREATE INDEX IF NOT EXISTS idx_showdowns_kind "
+    "ON showdowns(kind, status, finished_at)",
+)
+
 
 def _migrate(conn: sqlite3.Connection) -> None:
-    """Add any column in ``MIGRATIONS`` the database does not already have."""
+    """Add any column in ``MIGRATIONS`` the database lacks, then index them."""
     for table, column, decl in MIGRATIONS:
         existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
         if not existing:
             continue                       # table not created yet; SCHEMA owns it
         if column not in existing:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+
+    for statement in INDEXES:
+        conn.execute(statement)
 
 
 def _exec(sql: str, params: tuple = ()) -> sqlite3.Cursor:
