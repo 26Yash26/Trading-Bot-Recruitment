@@ -13,7 +13,9 @@ run play the whole of §9 rather than needing three sequential ones.
 
 from __future__ import annotations
 
+import json
 import sqlite3
+import time
 
 import pytest
 from fastapi.testclient import TestClient
@@ -109,7 +111,7 @@ def test_a_practice_run_does_not_bury_the_mock_board(finished_showdowns):
     assert [r["key"] for r in rows] == ["BOTMOCK"]
 
 
-#: The `showdowns` table exactly as it shipped before `kind` existed — the shape
+#: The `showdowns` table exactly as it shipped before `kind` existed, the shape
 #: the VM's live database is in when a deploy carrying `kind` lands on it.
 PRE_KIND_SHOWDOWNS = """
 CREATE TABLE showdowns (
@@ -143,7 +145,7 @@ def test_startup_upgrades_a_database_that_predates_kind(tmp_path):
     column did not exist yet and `CREATE INDEX ... ON showdowns(kind, ...)` blew
     up with "no such column: kind", aborting `executescript` and taking the API
     down on deploy. Every test passed, because every test database is created
-    fresh — where the table is built WITH the column and the ordering never
+    fresh, where the table is built WITH the column and the ordering never
     matters. Only an upgraded database can catch it, so build one.
     """
     conn = _open_pre_kind_database(tmp_path / "old.db")
@@ -288,14 +290,62 @@ def test_normalise_grouping_survives_whatever_is_in_the_database():
 def test_run_now_defaults_to_practice_and_accepts_a_kind(as_admin, monkeypatch):
     triggered = []
     monkeypatch.setattr(
-        "server.app.scheduler.trigger_now", lambda kind="practice": triggered.append(kind)
+        "server.app.scheduler.trigger_now",
+        lambda kind="practice", variations=None: triggered.append((kind, variations)),
     )
     monkeypatch.setattr("server.app.scheduler.running", False)
 
     assert as_admin.post("/api/admin/run-now", json={}, headers=ORIGIN).status_code == 200
     body = as_admin.post("/api/admin/run-now", json={"kind": "mock"}, headers=ORIGIN).json()
     assert body["kind"] == "mock"
-    assert triggered == ["practice", "mock"]
+    assert triggered == [("practice", None), ("mock", None)]
+
+
+def test_run_now_can_cover_one_variation_at_a_time(as_admin, monkeypatch):
+    """Replaying variation 1 must not disturb the others."""
+    triggered = []
+    monkeypatch.setattr(
+        "server.app.scheduler.trigger_now",
+        lambda kind="practice", variations=None: triggered.append((kind, variations)),
+    )
+    monkeypatch.setattr("server.app.scheduler.running", False)
+    before = store.get_settings()["variations"]
+    try:
+        store.update_settings({"variations": [1, 2]})
+        body = as_admin.post(
+            "/api/admin/run-now", json={"kind": "mock", "variations": [1]}, headers=ORIGIN
+        ).json()
+        assert body["variations"] == [1]
+        assert triggered == [("mock", (1,))]
+    finally:
+        store.update_settings({"variations": before})
+
+
+def test_run_now_refuses_a_variation_that_is_not_released(as_admin):
+    """Otherwise a run silently plays nobody and looks like a broken showdown."""
+    before = store.get_settings()["variations"]
+    try:
+        store.update_settings({"variations": [1, 2]})
+        response = as_admin.post(
+            "/api/admin/run-now", json={"variations": [4]}, headers=ORIGIN
+        )
+        assert response.status_code == 400
+        assert "not released" in response.json()["detail"]
+
+        for bad in ([], "1", [1, "x"]):
+            assert as_admin.post(
+                "/api/admin/run-now", json={"variations": bad}, headers=ORIGIN
+            ).status_code == 400
+    finally:
+        store.update_settings({"variations": before})
+
+
+def test_collect_field_narrows_to_the_chosen_variations():
+    settings = {"variations": [1, 2, 3], "banned_rolls": []}
+    everything = Scheduler().collect_field(settings)
+    narrowed = Scheduler().collect_field(settings, (1,))
+    assert set(narrowed) <= {1}
+    assert set(narrowed) <= set(everything)
 
 
 def test_run_now_refuses_a_kind_it_does_not_know(as_admin):
@@ -437,18 +487,19 @@ def test_progress_finishes_at_one_hundred_percent_when_the_finals_cut(monkeypatc
 # --- the default is the whole tournament ---------------------------------------
 
 
-def test_the_default_grouping_runs_the_tournament_on_every_showdown():
-    """`["random", "balanced"]` plus the hold-last rule means iteration 1 draws
-    blind and everything after it is seeded on the standing so far — however
-    many iterations there are, and whether the run is a practice tick, a mock or
-    the final."""
-    stored = store.DEFAULT_SETTINGS["grouping"]
-    assert stored == ["random", "balanced"]
+def test_a_showdown_is_the_whole_tournament_by_default():
+    """Five iterations: two random, one strength balanced, then two finals.
+    That is what a showdown means, and it is the shipped default rather than
+    something an admin has to assemble."""
+    grouping = store.DEFAULT_SETTINGS["grouping"]
+    assert grouping == ["random", "random", "balanced", "finals", "finals"]
+    assert store.DEFAULT_SETTINGS["iterations"] == len(grouping)
 
-    settings = ShowdownSettings(grouping=normalise_grouping(stored), iterations=5)
-    assert [settings.grouping_for_iteration(i) for i in range(5)] == [
-        "random", "balanced", "balanced", "balanced", "balanced",
-    ]
+    settings = ShowdownSettings(
+        grouping=normalise_grouping(grouping),
+        iterations=store.DEFAULT_SETTINGS["iterations"],
+    )
+    assert [settings.grouping_for_iteration(i) for i in range(5)] == grouping
 
 
 def test_a_default_run_consults_a_standing():
@@ -475,3 +526,99 @@ def test_bounds_mode_is_validated_at_the_admin_door(as_admin):
 
 def test_random_is_the_shipped_default_for_bounds():
     assert store.DEFAULT_SETTINGS["bounds_mode"] == "random"
+
+
+# --- one variation at a time -----------------------------------------------------
+
+
+@pytest.fixture
+def two_runs():
+    """An older run scoring variations 1 and 2, then a newer one scoring only 1.
+
+    The shape a per-variation replay leaves behind, and the case the live board
+    has to get right.
+    """
+    old = store.start_showdown({}, kind="practice")
+    store.finish_showdown(old, games=2, rows=[
+        {"key": "OLD1", "variation": 1, "score": 10.0, "rank": 1},
+        {"key": "OLD2", "variation": 2, "score": 20.0, "rank": 1},
+    ])
+    time.sleep(0.01)
+    new = store.start_showdown({}, kind="practice")
+    store.finish_showdown(new, games=1, rows=[
+        {"key": "NEW1", "variation": 1, "score": 30.0, "rank": 1},
+    ])
+    yield old, new
+    with store._lock:  # noqa: SLF001 - test teardown owns the connection
+        conn = store.connect()
+        conn.execute("DELETE FROM results WHERE showdown_id IN (?,?)", (old, new))
+        conn.execute("DELETE FROM showdowns WHERE id IN (?,?)", (old, new))
+        conn.commit()
+
+
+def test_replaying_one_variation_leaves_the_others_standing(two_runs):
+    """Without this, running variation 1 on its own wiped variation 2 off the
+    site: the board was whatever the single newest run happened to contain."""
+    board = {row["variation"]: row["key"] for row in store.leaderboard()}
+    assert board[1] == "NEW1", "variation 1 should show the newer run"
+    assert board[2] == "OLD2", "variation 2 should still show the older run"
+
+
+def test_naming_a_showdown_still_returns_exactly_that_board(two_runs):
+    old, _ = two_runs
+    rows = store.leaderboard(old)
+    assert {r["key"] for r in rows} == {"OLD1", "OLD2"}
+
+
+def test_latest_run_per_variation_picks_the_newest_of_each(two_runs):
+    old, new = two_runs
+    assert store.latest_run_per_variation() == {1: new, 2: old}
+
+
+# --- settings written by an older build ------------------------------------------
+
+
+def test_a_stored_string_grouping_is_upgraded_to_a_schedule(tmp_path):
+    """`get_settings` overlays the defaults with whatever is stored, so a value
+    saved once wins forever. When the SHAPE of a setting changes the stored one
+    has to be rewritten, or the new default never takes effect.
+
+    This bit in production: the live database held `grouping = "finals"` from
+    the single-mode era, which means every iteration cuts the field to the
+    leaders and a bot outside the top `finals_size` never plays at all.
+    """
+    conn = sqlite3.connect(tmp_path / "settings.db")
+    conn.row_factory = sqlite3.Row
+    conn.executescript(store.SCHEMA)
+    conn.execute("INSERT INTO settings(key, value) VALUES('grouping', ?)",
+                 (json.dumps("finals"),))
+    conn.execute("INSERT INTO settings(key, value) VALUES('iterations', ?)",
+                 (json.dumps(3),))
+    conn.commit()
+
+    store._migrate(conn)  # noqa: SLF001 - that is what is under test
+    conn.commit()
+
+    stored = {r["key"]: json.loads(r["value"])
+              for r in conn.execute("SELECT key, value FROM settings")}
+    assert stored["grouping"] == store.DEFAULT_SETTINGS["grouping"]
+    assert stored["iterations"] == len(store.DEFAULT_SETTINGS["grouping"])
+    conn.close()
+
+
+def test_a_stored_schedule_is_left_alone(tmp_path):
+    """Only the old string shape is rewritten. An admin's own schedule stands."""
+    conn = sqlite3.connect(tmp_path / "settings2.db")
+    conn.row_factory = sqlite3.Row
+    conn.executescript(store.SCHEMA)
+    mine = ["random", "balanced", "balanced"]
+    conn.execute("INSERT INTO settings(key, value) VALUES('grouping', ?)",
+                 (json.dumps(mine),))
+    conn.commit()
+
+    store._migrate(conn)  # noqa: SLF001
+    conn.commit()
+
+    row = conn.execute("SELECT value FROM settings WHERE key='grouping'").fetchone()
+    assert json.loads(row["value"]) == mine
+    conn.close()

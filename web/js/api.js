@@ -59,8 +59,9 @@ export const api = {
     update: json("PATCH").bind(null, "/admin/settings"),
     // `kind` labels the run: practice (the clock), mock, or final. It decides
     // whether the board survives the next practice run and which previous board
-    // a balanced or finals iteration seeds on — see server/scheduler.py.
-    runNow: (kind = "practice") => json("POST")("/admin/run-now", { kind }),
+    // a balanced or finals iteration seeds on, see server/scheduler.py.
+    runNow: (kind = "practice", variations = null) =>
+      json("POST")("/admin/run-now", variations ? { kind, variations } : { kind }),
     submissions: () => request("/admin/submissions"),
     showdowns: () => request("/admin/showdowns"),
     audit: () => request("/admin/audit"),
@@ -72,7 +73,7 @@ export const api = {
 /**
  * Live leaderboard stream.
  *
- * EventSource reconnects on its own, but only for transport drops — if the
+ * EventSource reconnects on its own, but only for transport drops, if the
  * server is restarted mid-deploy it can sit in a failed state, so a failure is
  * escalated to the caller and the caller falls back to polling.
  */

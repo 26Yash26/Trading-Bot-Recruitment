@@ -6,7 +6,7 @@ website shows survives a restart or a redeploy instead of silently sliding
 forward every time the service bounces.
 
 The showdown itself is CPU-bound and lives in a worker thread, which in turn
-fans out to a process pool — the event loop stays free to serve the site while
+fans out to a process pool, the event loop stays free to serve the site while
 a hundred bots are playing.
 """
 
@@ -27,7 +27,7 @@ def normalise_grouping(value: object) -> str | tuple[str, ...]:
 
     Accepts the old single string and the per-iteration list §9 needs, and drops
     anything unrecognised rather than letting a typo in the console raise inside
-    the showdown thread — where it would abort the run and leave the board empty.
+    the showdown thread, where it would abort the run and leave the board empty.
     """
     if isinstance(value, str):
         return value if value in GROUPINGS else "random"
@@ -52,8 +52,12 @@ class Scheduler:
         # back afterwards, so a forgotten switch cannot mislabel the 2am tick.
         self._pending_kind = store.DEFAULT_KIND
         self.kind = store.DEFAULT_KIND
+        # Which variations the next run covers. None means "every variation that
+        # is currently released", which is what the clock always does.
+        self._pending_variations: tuple[int, ...] | None = None
+        self.variations: tuple[int, ...] = ()
 
-    # -- lifecycle ---------------------------------------------------------
+    #, lifecycle ---------------------------------------------------------
 
     async def start(self) -> None:
         self._loop = asyncio.get_running_loop()
@@ -72,7 +76,7 @@ class Scheduler:
             except (asyncio.CancelledError, Exception):
                 pass
 
-    # -- scheduling --------------------------------------------------------
+    #, scheduling --------------------------------------------------------
 
     def _schedule_next(self, settings: dict | None = None) -> float:
         settings = settings or store.get_settings()
@@ -81,9 +85,19 @@ class Scheduler:
         store.update_settings({"next_run_at": next_at})
         return next_at
 
-    def trigger_now(self, kind: str = store.DEFAULT_KIND) -> None:
-        """Admin pressed Run now. ``kind`` labels this one run, not the clock."""
+    def trigger_now(
+        self,
+        kind: str = store.DEFAULT_KIND,
+        variations: tuple[int, ...] | None = None,
+    ) -> None:
+        """Admin pressed Run now.
+
+        ``kind`` labels this one run, not the clock, and ``variations`` narrows
+        it to a subset. Both apply to a single run and then fall back, so a
+        choice made here cannot quietly change what the clock does at 2am.
+        """
         self._pending_kind = store.normalise_kind(kind)
+        self._pending_variations = tuple(variations) if variations else None
         store.update_settings({"next_run_at": time.time()})
         if self._loop:
             self._loop.call_soon_threadsafe(self._wake.set)
@@ -91,7 +105,7 @@ class Scheduler:
             self._wake.set()
 
     def reschedule(self) -> None:
-        """Interval changed — recompute from now and wake the loop."""
+        """Interval changed, recompute from now and wake the loop."""
         self._schedule_next()
         if self._loop:
             self._loop.call_soon_threadsafe(self._wake.set)
@@ -104,6 +118,7 @@ class Scheduler:
         return {
             "running": self.running,
             "kind": self.kind,
+            "variations": list(self.variations),
             "pending_kind": self._pending_kind,
             "enabled": bool(settings.get("showdown_enabled", True)),
             "interval_minutes": int(settings.get("interval_minutes", 120)),
@@ -114,7 +129,7 @@ class Scheduler:
             "last_error": self.last_error,
         }
 
-    # -- the loop ----------------------------------------------------------
+    #, the loop ----------------------------------------------------------
 
     async def _loop_forever(self) -> None:
         while not self._stop:
@@ -147,17 +162,23 @@ class Scheduler:
                 self._schedule_next()
                 events.publish("schedule", self.state())
 
-    # -- one showdown ------------------------------------------------------
+    #, one showdown ------------------------------------------------------
 
-    def collect_field(self, settings: dict) -> dict[int, list[BotSpec]]:
-        """Latest accepted file per (roll, variation), minus banned roll numbers."""
+    def collect_field(
+        self, settings: dict, variations: tuple[int, ...] | None = None
+    ) -> dict[int, list[BotSpec]]:
+        """Latest accepted file per (roll, variation), minus banned roll numbers.
+
+        ``variations`` narrows the run to a subset of the released ones.
+        """
         banned = {r.upper() for r in settings.get("banned_rolls", [])}
+        wanted = set(variations or settings.get("variations", [1, 2]))
         field: dict[int, list[BotSpec]] = {}
         for row in store.active_submissions():
             if row["roll"].upper() in banned:
                 continue
             variation = int(row["variation"])
-            if variation not in settings.get("variations", [1, 2, 3]):
+            if variation not in wanted:
                 continue
             field.setdefault(variation, []).append(
                 BotSpec(key=row["roll"], path=row["path"], display=row["name"])
@@ -170,12 +191,12 @@ class Scheduler:
 
         The kind filter is the whole point. A balanced or finals iteration is
         seeded on cumulative points, and with a practice showdown landing every
-        two hours the last finished board is almost always a practice one — so a
+        two hours the last finished board is almost always a practice one, so a
         mock auction's snake seeding used to be built from a throwaway run
         against throwaway bounds, silently. A mock seeds on the previous mock;
         the final seeds on the previous final; practice seeds on practice.
 
-        Within one run, iterations seed on each other — see
+        Within one run, iterations seed on each other, see
         `harness.evaluate.run_showdown`. This is only the starting standing.
         """
         seeding: dict[int, dict[str, float]] = {}
@@ -190,13 +211,20 @@ class Scheduler:
             return {"status": "already-running"}
 
         settings = store.get_settings()
-        field = self.collect_field(settings)
+
+        # Released variations, narrowed to what this run was asked for.
+        released = [int(v) for v in settings.get("variations", [1, 2])]
+        chosen = self._pending_variations
+        variations = tuple(v for v in released if chosen is None or v in chosen) or tuple(released)
+        self._pending_variations = None
+
+        field = self.collect_field(settings, variations)
         if not any(field.values()):
             store.update_settings({"last_run_at": time.time()})
             return {"status": "no-submissions"}
 
         show_settings = ShowdownSettings(
-            variations=tuple(settings.get("variations", [1, 2])),
+            variations=variations,
             num_rounds=int(settings.get("num_rounds", 2000)),
             block_size=int(settings.get("block_size", 500)),
             group_size=int(settings.get("group_size", 20)),
@@ -217,12 +245,17 @@ class Scheduler:
 
         self.running = True
         self.kind = kind
+        self.variations = variations
         self.last_error = ""
         self.progress = (0, 0)
         showdown_id = store.start_showdown(settings, kind=kind)
         self.current_id = showdown_id
         loop = asyncio.get_running_loop()
-        events.publish("showdown", {"status": "started", "id": showdown_id, "kind": kind})
+        events.publish(
+            "showdown",
+            {"status": "started", "id": showdown_id, "kind": kind,
+             "variations": list(variations)},
+        )
 
         def on_progress(done: int, total: int) -> None:
             self.progress = (done, total)
@@ -249,7 +282,9 @@ class Scheduler:
             self.last_error = "; ".join(result.errors)[:300]
             store.audit(
                 "scheduler", "showdown",
-                f"id={showdown_id} kind={kind} games={result.games_played}",
+                f"id={showdown_id} kind={kind} "
+                f"variations={','.join(str(v) for v in variations)} "
+                f"games={result.games_played}",
             )
             events.publish("leaderboard", store.leaderboard())
             return {"status": "done", "id": showdown_id, "games": result.games_played}
@@ -260,6 +295,7 @@ class Scheduler:
         finally:
             self.running = False
             self.kind = store.DEFAULT_KIND
+            self.variations = ()
             self.current_id = None
             self.progress = (0, 0)
             events.publish(

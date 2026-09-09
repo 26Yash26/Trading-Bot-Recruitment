@@ -1,4 +1,4 @@
-// Admin console — the only place the competition's shape can be changed.
+// Admin console, the only place the competition's shape can be changed.
 //
 // Access is checked on the server for every one of these endpoints; hiding the
 // page from a non-admin is a courtesy, not the control.
@@ -25,7 +25,7 @@ const INTERVAL_PRESETS = [15, 30, 60, 120, 240, 480];
 
 const GROUPINGS = [
   ["random", "Random", "The field is reshuffled on a fresh seed."],
-  ["balanced", "Balanced", "Sorted by points so far and dealt in a snake — groups equal in average strength."],
+  ["balanced", "Balanced", "Sorted by points so far and dealt in a snake, groups equal in average strength."],
   ["finals", "Finals", "Only the leading bots, head to head."],
 ];
 
@@ -44,7 +44,7 @@ function groupingSchedule(settings) {
   const stored = Array.isArray(settings.grouping)
     ? settings.grouping
     : [settings.grouping || "random"];
-  // A schedule shorter than `iterations` holds its last entry — same rule as
+  // A schedule shorter than `iterations` holds its last entry, same rule as
   // `ShowdownSettings.grouping_for_iteration`, so the console cannot show a
   // tournament different from the one that will actually be played.
   return Array.from({ length: count }, (_, i) => stored[Math.min(i, stored.length - 1)]);
@@ -213,7 +213,7 @@ function showdownTab(settings, schedule, counts) {
             <div class="flex items-center justify-between text-sm">
               <span class="text-ink-2">Next showdown</span>
               <span class="font-mono text-[11px]">
-                ${schedule.next_run_at ? esc(new Date(schedule.next_run_at * 1000).toLocaleString()) : "—"}
+                ${schedule.next_run_at ? esc(new Date(schedule.next_run_at * 1000).toLocaleString()) : "-"}
               </span>
             </div>
             <div class="hair mt-4 flex items-center justify-between pt-4 text-sm">
@@ -245,8 +245,28 @@ function showdownTab(settings, schedule, counts) {
                 : ""
             }
             <div class="mt-6">
-              <span class="label">Run a showdown now, as</span>
-              <div class="mt-3 space-y-2">
+              <span class="label">Run a showdown now</span>
+              <p class="mt-2 font-mono text-[10px] leading-relaxed text-ink-3">
+                Pick the variations to play. Leave them all on to replay the whole
+                field. The board keeps every other variation exactly as it is, because
+                each one is taken from the newest run that scored it.
+              </p>
+              <div class="mt-3 flex flex-wrap gap-2">
+                ${(settings.variations || []).map(
+                  (id) => `
+                  <button type="button" data-run-variation="${id}"
+                          class="border px-3 py-2 font-mono text-[11px] transition-colors
+                                 border-flame text-flame"
+                          aria-pressed="true">V${id}</button>`
+                ).join("")}
+                ${
+                  (settings.variations || []).length
+                    ? ""
+                    : `<span class="font-mono text-[10px] text-loss">No variation is switched on.</span>`
+                }
+              </div>
+
+              <div class="mt-4 space-y-2">
                 ${RUN_KINDS.map(
                   ([value, title, note]) => `
                   <button type="button" data-run-now="${value}" ${schedule.running ? "disabled" : ""}
@@ -273,7 +293,11 @@ function showdownTab(settings, schedule, counts) {
               ${
                 schedule.running
                   ? `<p class="mt-3 font-mono text-[10px] text-flame">
-                       a ${esc(schedule.kind || "practice")} showdown is in progress…
+                       a ${esc(schedule.kind || "practice")} showdown is running${
+                         (schedule.variations || []).length
+                           ? ` for ${esc((schedule.variations || []).map((v) => "V" + v).join(", "))}`
+                           : ""
+                       }
                      </p>`
                   : ""
               }
@@ -309,15 +333,15 @@ function gameTab(settings, counts) {
         ${panelHead("Tournament", "Problem statement §9.")}
         <div class="p-6">
           <div class="grid gap-5 sm:grid-cols-2">
-            ${field("iterations", "Iterations per variation", settings.iterations, { min: 1 })}
             ${field("finals_size", "Finals field size", settings.finals_size, { min: 2 })}
           </div>
 
           <div class="mt-6">
-            <span class="label">Grouping, iteration by iteration</span>
+            <span class="label">Iterations in a showdown</span>
             <p class="mt-2 font-mono text-[10px] leading-relaxed text-ink-3">
-              §9 is random, random, balanced, then two finals. One run now plays the
-              whole thing: each iteration seeds on the standing after the ones before it.
+              One showdown plays this list, top to bottom. Each iteration is seeded on
+              the standing after the ones above it, so order matters. Every button here
+              saves straight away.
             </p>
             <div class="mt-4 space-y-2">
               ${groupingSchedule(settings)
@@ -327,11 +351,9 @@ function gameTab(settings, counts) {
                   <span class="w-16 shrink-0 font-mono text-[10px] text-ink-3">iter ${index + 1}</span>
                   <div class="flex flex-1 gap-2">
                     ${GROUPINGS.map(
-                      ([value, title]) => `
+                      ([value, title, note]) => `
                       <button type="button" data-grouping-at="${index}" data-grouping-mode="${value}"
-                              title="${esc(
-                                GROUPINGS.find(([v]) => v === value)[2]
-                              )}"
+                              title="${esc(note)}"
                               class="flex-1 border px-3 py-2 font-mono text-[10px] transition-colors
                                      ${
                                        mode === value
@@ -340,17 +362,35 @@ function gameTab(settings, counts) {
                                      }">${title}</button>`
                     ).join("")}
                   </div>
+                  <button type="button" data-iteration-remove="${index}"
+                          title="Remove this iteration"
+                          class="shrink-0 border border-line-2 px-2 py-2 font-mono text-[10px]
+                                 text-ink-3 transition-colors hover:border-loss hover:text-loss"
+                          ${groupingSchedule(settings).length < 2 ? "disabled" : ""}>&times;</button>
                 </div>`
                 )
                 .join("")}
             </div>
-            <div class="mt-3 flex flex-wrap gap-2">
+            <div class="mt-3 flex flex-wrap items-center gap-4">
+              <button type="button" data-iteration-add
+                      class="font-mono text-[10px] text-flame hover:underline">+ add an iteration</button>
+              <span class="font-mono text-[10px] text-ink-3">
+                ${groupingSchedule(settings).length}
+                ${groupingSchedule(settings).length === 1 ? "iteration" : "iterations"} per variation
+              </span>
+            </div>
+            <div class="mt-4 flex flex-wrap items-center gap-4">
               <span class="font-mono text-[10px] text-ink-3">presets:</span>
+              <button type="button" data-grouping-preset="standard"
+                      class="font-mono text-[10px] text-flame hover:underline">standard showdown</button>
               <button type="button" data-grouping-preset="random"
                       class="font-mono text-[10px] text-flame hover:underline">all random</button>
-              <button type="button" data-grouping-preset="ps9"
-                      class="font-mono text-[10px] text-flame hover:underline">§9 in full</button>
             </div>
+            <p class="mt-3 font-mono text-[10px] leading-relaxed text-ink-3">
+              The standard showdown is the tournament in §9: two random iterations, one
+              strength balanced, then two finals between the leading
+              ${esc(settings.finals_size)} bots.
+            </p>
           </div>
         </div>
       </div>
@@ -358,7 +398,7 @@ function gameTab(settings, counts) {
       <div class="panel lg:col-span-2">
         ${panelHead(
           "Capital draw at every block boundary",
-          "Problem statement §3.1 — κ ~ U[lo, hi], capital = m + (M − m)·κ."
+          "Problem statement §3.1, κ ~ U[lo, hi], capital = m + (M − m)·κ."
         )}
         <div class="grid gap-5 p-6 sm:grid-cols-2">
           ${field("kappa_lo", "κ minimum", settings.kappa_lo, { step: "0.05", min: 0 })}
@@ -397,7 +437,7 @@ function secretsTab(settings, isolation) {
     bwrap: ["Bubblewrap", "User + network + PID namespace, read-only /usr, tmpfs working directory.", "text-gain"],
     unshare: ["Network namespace", "Network is unreachable, but the filesystem is only rlimit-protected.", "text-flame"],
     sudo: ["Dedicated user", "Runs as an unprivileged account. No namespace isolation.", "text-flame"],
-    plain: ["Plain subprocess", "Resource limits only — fine for local development, not for the VM.", "text-loss"],
+    plain: ["Plain subprocess", "Resource limits only, fine for local development, not for the VM.", "text-loss"],
   };
   const [name, blurb, colour] = tiers[isolation] || tiers.plain;
 
@@ -412,7 +452,7 @@ function secretsTab(settings, isolation) {
               ["random", "Drawn off the grids",
                "m ∈ {10, 20, … 1000}, range ∈ {100, 200, … 10000}, M = m + range. A fresh schedule per iteration, from the seed below. 10,000 combinations, so nothing carries between showdowns."],
               ["fixed", "The schedule below",
-               "Typed by hand. For reproducing one specific run — otherwise the same four blocks every iteration, which is learnable."],
+               "Typed by hand. For reproducing one specific run, otherwise the same four blocks every iteration, which is learnable."],
             ]
               .map(
                 ([value, title, note]) => `
@@ -481,7 +521,7 @@ function secretsTab(settings, isolation) {
           </div>
           <p class="mt-4 font-mono text-[10px] leading-relaxed text-ink-3">
             The problem statement asks participants to stay under 100 MB. The enforced ceiling is
-            deliberately higher — importing numpy and pandas alone costs most of that, and a false
+            deliberately higher, importing numpy and pandas alone costs most of that, and a false
             disqualification is far worse than a generous limit.
           </p>
         </div>
@@ -496,7 +536,7 @@ function fieldTab(submissions, counts, settings) {
   return `
     <div class="panel">
       ${panelHead(
-        `Active submissions — ${counts.participants} participants, ${submissions.length} files`
+        `Active submissions, ${counts.participants} participants, ${submissions.length} files`
       )}
       <div class="hair-b flex flex-wrap gap-2 px-6 py-4">
         ${ALL_VARIATIONS.map(
@@ -554,7 +594,7 @@ function siteTab(settings) {
             <span class="label">Message</span>
             <input class="field mt-3" type="text" name="announcement"
                    value="${esc(settings.announcement || "")}"
-                   placeholder="Mock auction 1 results are out — variations 3 and 4 are now open.">
+                   placeholder="Mock auction 1 results are out, variations 3 and 4 are now open.">
           </label>
           <div class="mt-5 flex flex-wrap gap-3">
             <button class="btn-solid" data-save-announcement>Publish</button>
@@ -788,7 +828,7 @@ export async function renderAdmin(app) {
   };
 
   const numeric = new Set([
-    "interval_minutes", "num_rounds", "block_size", "group_size", "iterations",
+    "interval_minutes", "num_rounds", "block_size", "group_size",
     "finals_size", "workers", "mem_mb", "seed", "submit_cooldown",
   ]);
   const floaty = new Set([
@@ -834,7 +874,7 @@ export async function renderAdmin(app) {
     // The two extremes of the published grids: the narrowest block anyone can
     // draw, and the widest. The spread between them is the point of the rule.
     const describe = (m, range) =>
-      `[${m}, ${m + range}] → ${(m + range * kappaLo).toFixed(0)}–` +
+      `[${m}, ${m + range}] → ${(m + range * kappaLo).toFixed(0)}-` +
       `${(m + range * kappaHi).toFixed(0)}`;
 
     node.textContent =
@@ -874,11 +914,37 @@ export async function renderAdmin(app) {
       )
     );
 
+    // `iterations` and `grouping` are one thing, and they are saved as one.
+    // They used to be two: a deferred-save number field and immediate-save
+    // buttons. Typing 5 in the field and then clicking a grouping button
+    // repainted from the server and threw the 5 away, so the extra iterations
+    // could never be given a mode. The list below is now the only control, and
+    // the count follows its length.
+    const saveSchedule = (schedule) =>
+      save({ grouping: schedule, iterations: schedule.length });
+
     app.querySelectorAll("[data-grouping-at]").forEach((button) =>
       button.addEventListener("click", () => {
         const schedule = groupingSchedule(data.settings);
         schedule[Number(button.dataset.groupingAt)] = button.dataset.groupingMode;
-        save({ grouping: schedule });
+        saveSchedule(schedule);
+      })
+    );
+
+    app.querySelector("[data-iteration-add]")?.addEventListener("click", () => {
+      const schedule = groupingSchedule(data.settings);
+      // A new iteration repeats the last one, which is the usual intent when
+      // lengthening a run and is never a surprise.
+      schedule.push(schedule[schedule.length - 1] || "random");
+      saveSchedule(schedule);
+    });
+
+    app.querySelectorAll("[data-iteration-remove]").forEach((button) =>
+      button.addEventListener("click", () => {
+        const schedule = groupingSchedule(data.settings);
+        if (schedule.length < 2) return;
+        schedule.splice(Number(button.dataset.iterationRemove), 1);
+        saveSchedule(schedule);
       })
     );
 
@@ -933,30 +999,58 @@ export async function renderAdmin(app) {
 
     app.querySelectorAll("[data-grouping-preset]").forEach((button) =>
       button.addEventListener("click", () => {
-        const count = Math.max(1, Number(data.settings.iterations) || 1);
-        // §9: two random iterations, one balanced, then finals for the rest.
-        const ps9 = Array.from({ length: count }, (_, i) =>
-          i < 2 ? "random" : i === 2 ? "balanced" : "finals"
-        );
-        save({
-          grouping: button.dataset.groupingPreset === "ps9" ? ps9 : "random",
-        });
+        const preset =
+          button.dataset.groupingPreset === "standard"
+            ? ["random", "random", "balanced", "finals", "finals"]
+            : Array.from(
+                { length: groupingSchedule(data.settings).length },
+                () => "random"
+              );
+        saveSchedule(preset);
       })
     );
+
+    // The variation chips are a local, unsaved choice: they say what THIS run
+    // covers, not what the site has released. Toggling one must not repaint.
+    app.querySelectorAll("[data-run-variation]").forEach((button) =>
+      button.addEventListener("click", () => {
+        const on = button.getAttribute("aria-pressed") === "true";
+        button.setAttribute("aria-pressed", String(!on));
+        button.className = on
+          ? "border px-3 py-2 font-mono text-[11px] transition-colors border-line-2 text-ink-3 hover:text-ink-2"
+          : "border px-3 py-2 font-mono text-[11px] transition-colors border-flame text-flame";
+      })
+    );
+
+    const chosenVariations = () =>
+      [...app.querySelectorAll('[data-run-variation][aria-pressed="true"]')].map((b) =>
+        Number(b.dataset.runVariation)
+      );
 
     app.querySelectorAll("[data-run-now]").forEach((button) =>
       button.addEventListener("click", async () => {
         const kind = button.dataset.runNow;
         const label = RUN_KINDS.find(([value]) => value === kind)?.[1] || kind;
+        const variations = chosenVariations();
+        if (!variations.length) {
+          toast("Pick at least one variation to run.", "error");
+          return;
+        }
+        const covers = variations.map((v) => "V" + v).join(", ");
         // A mock or final board is a published artefact and it seeds the next
         // one. Mislabelling it is not undoable from this page, so ask first.
-        if (kind !== "practice" && !confirm(`Run a ${label.toLowerCase()}? Its board is archived and published.`)) {
+        if (
+          kind !== "practice" &&
+          !confirm(
+            `Run a ${label.toLowerCase()} for ${covers}? Its board is archived and published.`
+          )
+        ) {
           return;
         }
         app.querySelectorAll("[data-run-now]").forEach((b) => (b.disabled = true));
         try {
-          await api.admin.runNow(kind);
-          toast(`${label} starting…`, "ok");
+          await api.admin.runNow(kind, variations);
+          toast(`${label} starting for ${covers}`, "ok");
           setTimeout(async () => {
             await load();
             paint();
@@ -988,7 +1082,7 @@ export async function renderAdmin(app) {
   paint();
 
   // The clock keeps moving while this page is open. Repaint for it, but never
-  // while somebody is typing into one of these fields — a showdown finishing
+  // while somebody is typing into one of these fields, a showdown finishing
   // mid-edit must not swallow what they were entering.
   let signature = "";
   const unsubscribe = store.subscribe(() => {

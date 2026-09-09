@@ -1,6 +1,6 @@
 """SQLite persistence: users, sessions, submissions, showdowns, settings, audit.
 
-One small database, WAL mode, guarded by a lock — the write volume here is a few
+One small database, WAL mode, guarded by a lock, the write volume here is a few
 hundred submissions and a leaderboard every two hours, so anything bigger would
 be furniture. It lives in ``config.DATA_DIR``, deliberately outside the web root.
 """
@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS audit (
 #:
 #: A ``balanced`` or ``finals`` iteration seeds on the standing so far, so it
 #: matters enormously which board that comes from. Seeding reads the latest
-#: finished run **of the same kind** — before this column existed it read
+#: finished run **of the same kind**, before this column existed it read
 #: whatever had finished last, which on a two-hourly clock is a practice run.
 SHOWDOWN_KINDS = ("practice", "mock", "final")
 DEFAULT_KIND = "practice"
@@ -127,13 +127,14 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "num_rounds": 2000,
     "block_size": 500,
     "group_size": 20,
-    # The tournament (§9): how many iterations, and how groups are drawn.
-    "iterations": 3,
-    # One mode for every iteration, or one per iteration (§9). A list shorter
-    # than `iterations` holds its last entry, so the default below means
-    # "iteration 1 draws blind, and every iteration after it is seeded on the
-    # standing so far" — the tournament, run in full, on every showdown.
-    "grouping": ["random", "balanced"],   # random | balanced | finals
+    # The tournament (§9). One showdown plays the whole thing: five iterations,
+    # the first two on random groups, the third strength balanced, the last two
+    # a finals between the leaders. `iterations` is always the length of
+    # `grouping`; the admin console edits them together.
+    "iterations": 5,
+    # One grouping mode per iteration. A list shorter than `iterations` holds
+    # its last entry, so a short list is still valid.
+    "grouping": ["random", "random", "balanced", "finals", "finals"],
     "finals_size": 20,
     # The capital draw at every block boundary (§3.1):
     #   C = m_b + (M_b - m_b) * kappa,  kappa ~ U[kappa_lo, kappa_hi]
@@ -145,7 +146,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "bounds_mode": "random",
     # Only consulted when `bounds_mode` is "fixed". Never leaves the server.
     # Either one schedule of four blocks (reused by every iteration) or one
-    # schedule per iteration — see
+    # schedule per iteration, see
     # `src.auction.distributions.normalise_block_bounds`.
     #
     # These differ in BOTH scale and width on purpose. Identical blocks would
@@ -197,7 +198,7 @@ def connect() -> sqlite3.Connection:
 
 #: Columns added after the first deployment. ``CREATE TABLE IF NOT EXISTS`` is a
 #: no-op on a database that already has the table, so a new column never reaches
-#: the VM without this — and the VM's database is the one holding every real
+#: the VM without this, and the VM's database is the one holding every real
 #: submission, so it is never dropped and recreated.
 MIGRATIONS: tuple[tuple[str, str, str], ...] = (
     ("showdowns", "kind", "TEXT NOT NULL DEFAULT 'practice'"),
@@ -207,7 +208,7 @@ MIGRATIONS: tuple[tuple[str, str, str], ...] = (
 #:
 #: These cannot live in ``SCHEMA``. On a database that already has the table,
 #: ``CREATE TABLE IF NOT EXISTS`` is a no-op, so the new column does not exist
-#: when ``SCHEMA`` is executed — and ``CREATE INDEX ... ON showdowns(kind, ...)``
+#: when ``SCHEMA`` is executed, and ``CREATE INDEX ... ON showdowns(kind, ...)``
 #: then fails with "no such column: kind", aborting the whole script and taking
 #: startup down. Only a *fresh* database survives that ordering, which is every
 #: database a test ever sees. Index after migrating, never before.
@@ -228,6 +229,40 @@ def _migrate(conn: sqlite3.Connection) -> None:
 
     for statement in INDEXES:
         conn.execute(statement)
+
+    _migrate_settings(conn)
+
+
+def _migrate_settings(conn: sqlite3.Connection) -> None:
+    """Repair stored settings written by an older build.
+
+    `get_settings` overlays DEFAULT_SETTINGS with whatever is stored, so a value
+    saved once keeps winning forever. When the *shape* of a setting changes, the
+    stored one has to be rewritten or the new default never takes effect.
+
+    `grouping` used to be a single mode applied to every iteration. It is now one
+    mode per iteration, and a database still holding the old string quietly plays
+    a different tournament from the one the site describes: a stored "finals"
+    means every iteration cuts the field to the leaders, so a bot outside the top
+    `finals_size` never plays at all.
+    """
+    row = conn.execute("SELECT value FROM settings WHERE key = 'grouping'").fetchone()
+    if row is None:
+        return
+    try:
+        stored = json.loads(row["value"])
+    except (TypeError, ValueError):
+        stored = None
+    if isinstance(stored, str):
+        conn.execute(
+            "UPDATE settings SET value = ? WHERE key = 'grouping'",
+            (json.dumps(DEFAULT_SETTINGS["grouping"]),),
+        )
+        conn.execute(
+            "INSERT INTO settings(key, value) VALUES('iterations', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (json.dumps(len(DEFAULT_SETTINGS["grouping"])),),
+        )
 
 
 def _exec(sql: str, params: tuple = ()) -> sqlite3.Cursor:
@@ -259,7 +294,7 @@ def get_settings() -> dict[str, Any]:
 
 
 def public_settings() -> dict[str, Any]:
-    """Settings safe to hand to a browser — the hidden bounds and seed stay here."""
+    """Settings safe to hand to a browser, the hidden bounds and seed stay here."""
     return {k: v for k, v in get_settings().items() if k not in SECRET_SETTING_KEYS}
 
 
@@ -354,7 +389,7 @@ def record_submission(
 
 
 def active_submissions(variation: int | None = None) -> list[dict]:
-    """The latest accepted file per (roll, variation) — what a showdown plays."""
+    """The latest accepted file per (roll, variation), what a showdown plays."""
     if variation is None:
         rows = _query("SELECT * FROM submissions WHERE active = 1 ORDER BY roll")
     else:
@@ -449,7 +484,7 @@ def showdown_history(limit: int = 20, kind: str | None = None) -> list[dict]:
 
 
 def published_showdowns(limit: int = 30) -> list[dict]:
-    """Finished mock and final runs, newest first — the archive the site offers.
+    """Finished mock and final runs, newest first, the archive the site offers.
 
     Practice runs are excluded on purpose. There have been hundreds of them, they
     are rewritten every two hours, and none of them means anything; an archive
@@ -464,19 +499,61 @@ def published_showdowns(limit: int = 30) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def leaderboard(showdown_id: int | None = None, kind: str | None = None) -> list[dict]:
-    """Ranked rows from a showdown, joined to the display name of each roll.
+def latest_run_per_variation(kind: str | None = None) -> dict[int, int]:
+    """For each variation, the id of the newest finished run that scored it.
 
-    With no ``showdown_id`` this is the latest finished run — of ``kind``, if one
-    is given. Naming an id wins over naming a kind.
+    A showdown can be run for one variation at a time, which means the newest
+    run overall does not necessarily hold a board for every variation. Taking
+    the newest run per variation is what stops "run variation 1 again" from
+    wiping variation 2 off the site.
+    """
+    sql = (
+        "SELECT r.variation AS variation, r.showdown_id AS showdown_id, "
+        "s.finished_at AS finished_at "
+        "FROM results r JOIN showdowns s ON s.id = r.showdown_id "
+        "WHERE s.status = 'done'"
+    )
+    params: tuple = ()
+    if kind is not None:
+        sql += " AND s.kind = ?"
+        params = (normalise_kind(kind),)
+
+    best: dict[int, tuple[int, float]] = {}
+    for row in _query(sql, params):
+        variation = int(row["variation"])
+        finished = float(row["finished_at"] or 0.0)
+        if variation not in best or finished > best[variation][1]:
+            best[variation] = (int(row["showdown_id"]), finished)
+    return {variation: showdown for variation, (showdown, _) in best.items()}
+
+
+def leaderboard(showdown_id: int | None = None, kind: str | None = None) -> list[dict]:
+    """Ranked rows, joined to the display name of each roll.
+
+    Naming a ``showdown_id`` returns exactly that board. With no id this is the
+    live board: for every variation, the newest finished run that scored it, of
+    ``kind`` if one is given. Those runs need not be the same run, because a
+    showdown can be played for one variation at a time.
     """
     if showdown_id is None:
-        latest = latest_showdown(kind=kind)
-        if latest is None:
+        per_variation = latest_run_per_variation(kind)
+        if not per_variation:
             return []
-        showdown_id = int(latest["id"])
-
-    rows = _query("SELECT payload FROM results WHERE showdown_id = ?", (showdown_id,))
+        ids = sorted(set(per_variation.values()))
+        holes = ",".join("?" * len(ids))
+        rows = _query(
+            f"SELECT payload, variation, showdown_id FROM results "
+            f"WHERE showdown_id IN ({holes})",
+            tuple(ids),
+        )
+        # A run that scored several variations is the newest for some of them
+        # and stale for others, so filter row by row rather than run by run.
+        rows = [
+            r for r in rows
+            if per_variation.get(int(r["variation"])) == int(r["showdown_id"])
+        ]
+    else:
+        rows = _query("SELECT payload FROM results WHERE showdown_id = ?", (showdown_id,))
     names = {
         r["roll"]: r["name"]
         for r in _query("SELECT roll, name FROM submissions WHERE active = 1")

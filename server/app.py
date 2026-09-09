@@ -1,7 +1,7 @@
 """The API behind the competition site.
 
 Public:   leaderboard, showdown clock, rules metadata.
-Gated:    submitting a bot — Google OAuth, ``@smail.iitm.ac.in`` only.
+Gated:    submitting a bot, Google OAuth, ``@smail.iitm.ac.in`` only.
 Admin:    tuning the showdown, running one on demand, bans, audit log.
 
 Locally this also serves the static site so ``python -m server`` is the whole
@@ -53,7 +53,7 @@ async def lifespan(_app: FastAPI):
 log = logging.getLogger("quantguild")
 
 app = FastAPI(
-    title="Quant Guild — Trading Bot Recruitment",
+    title="Quant Guild, Trading Bot Recruitment",
     docs_url=None,
     redoc_url=None,
     lifespan=lifespan,
@@ -94,7 +94,7 @@ def require_admin(request: Request) -> dict:
 
 
 def roll_from_email(email: str) -> str:
-    """IIT Madras smail local parts are roll numbers — bind the two together."""
+    """IIT Madras smail local parts are roll numbers, bind the two together."""
     local = email.split("@", 1)[0].upper()
     return local if ROLL_RE.match(local) else ""
 
@@ -214,8 +214,8 @@ def public_state() -> dict:
     """Everything the site needs to draw itself, and nothing more.
 
     Also the payload of the ``state`` server-sent event, so a setting changed in
-    the control room — which variations are in play, whether submissions are
-    open, the announcement — reaches every open tab without a reload.
+    the control room, which variations are in play, whether submissions are
+    open, the announcement, reaches every open tab without a reload.
     """
     settings = store.public_settings()
     latest = store.latest_showdown()
@@ -319,8 +319,8 @@ LATE_VARIATIONS = (3, 4)
 def api_late_variations():
     """The browser module describing variations 3 and 4.
 
-    Everything about them — names, rules, the worked example, the payoff
-    arithmetic behind the interactive bench — lives in this one file, which sits
+    Everything about them, names, rules, the worked example, the payoff
+    arithmetic behind the interactive bench, lives in this one file, which sits
     under ``server/`` rather than ``web/`` so nginx will not serve it as a static
     asset (``deploy/nginx.conf`` blocks the whole directory). It is handed out
     only once the admin has switched one of them on.
@@ -356,7 +356,7 @@ def api_scoring_pdf():
 
     `docs/scoring.tex` builds twice (`scripts/build_docs.sh`): a public PDF
     covering variations 1 and 2, and a full one covering all four. Which is
-    served follows the same switch as `late.js` — before release the full
+    served follows the same switch as `late.js`, before release the full
     document simply is not reachable, so the V3 and V4 payoff rules cannot be
     read out of it.
 
@@ -399,7 +399,7 @@ async def api_submit(
 
     expected_roll = user["roll"] or roll_from_email(user["email"])
 
-    # A smail address whose local part is not a roll number — a club or staff
+    # A smail address whose local part is not a roll number, a club or staff
     # account. There is no roll to bind the upload to, so the filename check in
     # `harness.validate` would have nothing to compare against and the file
     # could claim any roll it liked. Refuse rather than skip the check.
@@ -446,12 +446,12 @@ async def api_submit(
     if parsed is None:
         raise HTTPException(
             status_code=400,
-            detail="Name your file ROLLNO_<variation>.py — for example ME24B152_1.py",
+            detail="Name your file ROLLNO_<variation>.py, for example ME24B152_1.py",
         )
     roll, variation = parsed
 
-    # A variation that is not in play is not on the site either — the submit
-    # form will not offer it — so a file naming one is either a stale page or a
+    # A variation that is not in play is not on the site either, the submit
+    # form will not offer it, so a file naming one is either a stale page or a
     # hand-crafted request. Both deserve the same plain answer.
     in_play = [int(v) for v in settings.get("variations", list(VARIATIONS))]
     if variation not in in_play:
@@ -484,10 +484,10 @@ async def api_submit(
                 ),
             )
         except Exception:
-            # validate() rejecting a bad bot returns ValidationResult(ok=False) —
-            # it never raises for that. A raise here means OUR settings or code
+            # validate() rejecting a bad bot returns ValidationResult(ok=False).
+            # It never raises for that. A raise here means OUR settings or code
             # are broken (this is exactly how a malformed block_bounds surfaced:
-            # https://github.com/26Yash26/Trading-Bot-Recruitment — fixed in
+            # https://github.com/26Yash26/Trading-Bot-Recruitment, fixed in
             # harness/validate.py, but nothing should ever again be able to turn
             # a config mistake into a bare "Internal Server Error" that reads as
             # if the participant's file were at fault). Log it for us, and tell
@@ -503,7 +503,7 @@ async def api_submit(
                 {
                     "ok": False,
                     "message": (
-                        "The check crashed on our side — not a problem with your file. "
+                        "The check crashed on our side, not a problem with your file. "
                         "We've logged it. Try again in a minute, and flag it on the "
                         "guild group if it keeps happening."
                     ),
@@ -587,7 +587,7 @@ def normalise_variations(value: object) -> list[int]:
 def normalise_grouping_setting(value: object) -> str | list[str]:
     """One grouping mode, or one per iteration (§9).
 
-    A single string keeps the old behaviour — that mode for every iteration. A
+    A single string keeps the old behaviour, that mode for every iteration. A
     list plays the real tournament in one run: `["random", "random", "balanced"]`
     is qualification, and a list shorter than `iterations` holds its last entry.
     """
@@ -659,8 +659,8 @@ async def admin_run_now(request: Request, admin: dict = Depends(require_admin)):
     """Start a showdown now, labelled `practice` (default), `mock` or `final`.
 
     The label decides three things: whether the board survives the next practice
-    run, whether it appears in the public archive, and — because a balanced or
-    finals iteration seeds on the standing so far — which previous board this run
+    run, whether it appears in the public archive, and, because a balanced or
+    finals iteration seeds on the standing so far, which previous board this run
     is seeded from. Getting it wrong is not cosmetic, so it is audited.
     """
     security.require_same_origin(request)
@@ -678,9 +678,48 @@ async def admin_run_now(request: Request, admin: dict = Depends(require_admin)):
             detail=f"kind must be one of {', '.join(store.SHOWDOWN_KINDS)}.",
         )
 
-    store.audit(admin["email"], "run-now", f"kind={requested}")
-    scheduler.trigger_now(requested)
-    return {"ok": True, "kind": requested, "schedule": scheduler.state()}
+    # Which variations this run covers. Omitted means every released one, which
+    # is what the clock does. Naming a subset is how a single variation gets
+    # replayed without disturbing the others: the live board takes each
+    # variation from the newest run that scored it, so the rest stay put.
+    settings = store.get_settings()
+    released = [int(v) for v in settings.get("variations", [])]
+    raw = (body or {}).get("variations")
+    chosen: list[int] | None = None
+    if raw is not None:
+        if not isinstance(raw, list) or not raw:
+            raise HTTPException(
+                status_code=400, detail="variations must be a non-empty list."
+            )
+        try:
+            chosen = sorted({int(v) for v in raw})
+        except (TypeError, ValueError):
+            raise HTTPException(
+                status_code=400, detail="variations must be whole numbers."
+            ) from None
+        unreleased = [v for v in chosen if v not in released]
+        if unreleased:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Cannot run variation "
+                    + ", ".join(str(v) for v in unreleased)
+                    + ": it is not released. Turn it on first."
+                ),
+            )
+
+    covers = chosen or released
+    store.audit(
+        admin["email"], "run-now",
+        f"kind={requested} variations={','.join(str(v) for v in covers)}",
+    )
+    scheduler.trigger_now(requested, tuple(chosen) if chosen else None)
+    return {
+        "ok": True,
+        "kind": requested,
+        "variations": covers,
+        "schedule": scheduler.state(),
+    }
 
 
 @app.get("/api/admin/submissions")
