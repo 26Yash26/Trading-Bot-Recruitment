@@ -8,8 +8,9 @@ into blocks of ``block_size``. At every block boundary two things change and
 neither is announced:
 
     * the hidden value distribution is redrawn (``distributions.ValueSampler``);
-    * every player's capital is redrawn (``capital.CapitalDraw``), and a bot that
-      went bankrupt during the previous block comes back.
+    * every player's capital is redrawn (``capital.CapitalDraw``) from that
+      block's own floor and width, and a bot that went bankrupt during the
+      previous block comes back.
 
 Round procedure:
     1. draw x_i for every active player
@@ -184,8 +185,8 @@ def run_game(
             if len(caps) != n:
                 raise ValueError("starting_capitals length must match bot_classes")
     else:
-        first_max = float(sampler.bounds_for_round(0)[1])
-        caps = [capital_draw.draw(rng, first_max) for _ in range(n)]
+        first_lo, first_hi = sampler.bounds_for_round(0)
+        caps = [capital_draw.draw(rng, first_lo, first_hi) for _ in range(n)]
 
     ceiling = math.inf if max_bid is None else float(max_bid)
     players = [
@@ -205,11 +206,11 @@ def run_game(
         if start_round >= num_rounds:
             break
         block_rounds = min(block_size, num_rounds - start_round)
-        block_max = float(sampler.bounds_for_round(start_round)[1])
+        block_min, block_max = (float(v) for v in sampler.bounds_for_round(start_round))
 
         if block > 0 and capital_draw is not None:
             for player in players:
-                player.begin_block(capital_draw.draw(rng, block_max))
+                player.begin_block(capital_draw.draw(rng, block_min, block_max))
 
         block_start_caps = [p.capital for p in players]
         stopped_early = False

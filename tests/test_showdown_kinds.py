@@ -379,3 +379,46 @@ def test_progress_finishes_at_one_hundred_percent_when_the_finals_cut(monkeypatc
     assert done == total == result.games_played
     # Two groups per random/balanced iteration, one for the cut-down finals.
     assert result.games_played == 7
+
+
+# --- the default is the whole tournament ---------------------------------------
+
+
+def test_the_default_grouping_runs_the_tournament_on_every_showdown():
+    """`["random", "balanced"]` plus the hold-last rule means iteration 1 draws
+    blind and everything after it is seeded on the standing so far — however
+    many iterations there are, and whether the run is a practice tick, a mock or
+    the final."""
+    stored = store.DEFAULT_SETTINGS["grouping"]
+    assert stored == ["random", "balanced"]
+
+    settings = ShowdownSettings(grouping=normalise_grouping(stored), iterations=5)
+    assert [settings.grouping_for_iteration(i) for i in range(5)] == [
+        "random", "balanced", "balanced", "balanced", "balanced",
+    ]
+
+
+def test_a_default_run_consults_a_standing():
+    """The regression this guards: if the default were plain "random", a mock
+    would silently play blind groups and the tournament structure the rules page
+    advertises would never actually run."""
+    settings = ShowdownSettings(grouping=normalise_grouping(store.DEFAULT_SETTINGS["grouping"]))
+    assert set(settings.grouping_schedule()) != {"random"}
+
+
+def test_bounds_mode_is_validated_at_the_admin_door(as_admin):
+    before = store.get_settings()["bounds_mode"]
+    try:
+        assert as_admin.patch(
+            "/api/admin/settings", json={"bounds_mode": "fixed"}, headers=ORIGIN
+        ).status_code == 200
+        assert store.get_settings()["bounds_mode"] == "fixed"
+        assert as_admin.patch(
+            "/api/admin/settings", json={"bounds_mode": "sometimes"}, headers=ORIGIN
+        ).status_code == 400
+    finally:
+        store.update_settings({"bounds_mode": before})
+
+
+def test_random_is_the_shipped_default_for_bounds():
+    assert store.DEFAULT_SETTINGS["bounds_mode"] == "random"

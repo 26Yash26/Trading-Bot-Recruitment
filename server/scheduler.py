@@ -204,6 +204,7 @@ class Scheduler:
             grouping=normalise_grouping(settings.get("grouping", "random")),
             finals_size=int(settings.get("finals_size", 20)),
             capital=CapitalDraw.from_settings(settings),
+            bounds_mode=str(settings.get("bounds_mode", "random")),
             block_bounds=tuple(tuple(b) for b in settings.get("block_bounds")),
             seed=int(settings.get("seed", 20260916)) + int(time.time()) % 100000,
             workers=int(settings.get("workers", 4)),

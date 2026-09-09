@@ -111,24 +111,63 @@ with $[m_b, M_b]$ fixed within a block and redrawn at every boundary. Neither
 bound, nor the block index, nor the fact that a boundary has just happened, is
 ever reported to a bot. Detecting the regime change is part of the problem.
 
+The bounds themselves are drawn, not chosen. Each block independently takes
+\begin{equation}
+  m_b \sim \mathcal{U}\{10, 20, \dots, 1000\},
+  \qquad
+  r_b \sim \mathcal{U}\{100, 200, \dots, 10000\},
+  \qquad
+  M_b = m_b + r_b,
+  \label{eq:bounds}
+\end{equation}
+uniformly over the two grids --- 100 values each, so $10^4$ possible blocks.
+Both grids span two orders of magnitude, and two properties of them do real work:
+
+\begin{itemize}[nosep,leftmargin=1.4em]
+\item \textbf{$m_b$ is never zero.} A bot cannot treat $x$ as a draw from
+  $\mathcal{U}[0, M]$ and read $M$ off the maximum it has seen. The block
+  $[1000, 1100]$, where every value sits within 10\% of every other, is exactly
+  as likely as $[10, 10010]$.
+\item \textbf{The width is independent of the floor.} Scale and spread move
+  separately, so ``how far above the floor am I'' and ``how close to the top am
+  I'' are different questions with different answers block to block.
+\end{itemize}
+
+\noindent
+Each \emph{iteration} draws its own schedule of $B$ blocks from the master seed,
+so no two iterations share one; every group inside an iteration plays the same
+schedule, which is what makes their standardised scores comparable and what a
+balanced or finals iteration seeds on. A hand-written schedule remains possible
+(\code{bounds\_mode = "fixed"}) for reproducing a specific run.
+
 \subsection{Capital}
 \label{sec:capital}
 Capital is redrawn independently for every bot at the start of every block:
 \begin{equation}
-  \kappa \sim \mathcal{U}[0.5,\, 2.5], \qquad
-  u \sim \mathcal{U}[-10,\, 10], \qquad
-  C^{\text{start}}_{i,b} = \max\!\left(\kappa M_b + u,\; 0.05\, M_b\right).
+  \kappa \sim \mathcal{U}[0.5,\, 2.5],
+  \qquad
+  \boxed{\;C^{\text{start}}_{i,b} = m_b + r_b\,\kappa\;}
   \label{eq:capital}
 \end{equation}
-What a bot finished the previous block with does \emph{not} carry over. The
-floor $0.05\,M_b$ only binds when $M_b$ is small; it exists to rule out a zero
-or negative starting capital.
+with $m_b$ and $r_b$ that block's floor and width from~\eqref{eq:bounds}. What a
+bot finished the previous block with does \emph{not} carry over.
 
-Two consequences that shape the whole score. First, within a block some bots
-start rich and some start poor, so a strategy that behaves identically on a
-half-$M_b$ bankroll and a $2.5 M_b$ one is being measured on exactly that.
-Second, because capital resets, the four blocks are four \emph{independent}
-tests: a bot cannot bank a good block and coast.
+Capital is anchored to the floor and scaled by the \emph{width}, not by $M_b$.
+That is what keeps $\kappa$ meaning one thing --- ``how many block-widths of
+headroom I start with'' --- across blocks that look nothing like each other.
+Scaling by $M_b$ instead would hand every bot roughly the same bankroll relative
+to the spread of values in a narrow block like $[1000, 1100]$, which is the one
+quantity the capital draw exists to vary.
+
+It also needs no patching. Since $m_b \ge 10$ and $r_b \ge 100$, the smallest
+possible capital is $10 + 100 \times 0.5 = 60$: comfortably positive, with no
+floor term and no additive jitter to keep a small block off zero.
+
+Two consequences shape the whole score. First, within a block some bots start on
+half a block-width of headroom and some on two and a half, so a strategy that
+behaves identically on a thin bankroll and a fat one is being measured on
+exactly that. Second, because capital resets, the four blocks are four
+\emph{independent} tests: a bot cannot bank a good block and coast.
 
 \subsection{Legality and bankruptcy}
 The legal bid ceiling is the bot's own capital. A bid above it, negative,
@@ -236,7 +275,7 @@ is separated by a block that separated nobody. If the group has a single member,
 that member gets $50$.
 
 The $\pm 3$ clip is not cosmetic. Without it a single block in which one bot
-happened to draw a huge $\kappa$ and win a run of rounds could contribute
+happened to draw a large $\kappa$ and win a run of rounds could contribute
 several hundred points and decide the competition on variance rather than skill.
 Clipping caps any one block's contribution at $95$ and floors it at $5$.
 
@@ -327,9 +366,9 @@ $s_i$ measures robustness to the regime change, not just round-to-round noise.
 \end{equation}
 The tail, reported directly. $s_i$ can be dragged up by an unusually
 \emph{good} block, which is not a risk; $\pi^{\min}$ cannot. A bot whose
-$\pi^{\min}$ approaches $-\kappa$ (Section~\ref{sec:capital}) lost its entire
-starting capital in some block, which is the same statement as
-\code{survival\_rate} $< 1$.
+$\pi^{\min}$ approaches $-C^{\text{start}}_{i,b}/M_b$
+(Section~\ref{sec:capital}) lost its entire starting capital in some block,
+which is the same statement as \code{survival\_rate} $< 1$.
 
 \subsection{\code{survival\_rate} --- Survival}
 \label{sec:survival}
@@ -490,22 +529,30 @@ balanced iteration snake-seeds on iterations 1--2's points, and a finals
 iteration cuts the field on everything above it. A run whose iterations are all
 \code{random} needs no standing at all and does not consult one.
 
-A run may also be given a single mode, which then applies to every iteration; a
-schedule shorter than \code{iterations} holds its last entry. Where a run does
-need a standing it did not produce itself --- the first balanced run of a fresh
-board --- it takes the last finished showdown \emph{of its own kind}
-(Section~\ref{sec:mock}), never whichever board happened to finish most
-recently.
+A schedule shorter than \code{iterations} \emph{holds its last entry} rather
+than cycling. That is what the default, \code{["random", "balanced"]}, relies
+on: iteration 1 draws groups blind because there is nothing to seed on yet, and
+every iteration after it is strength-balanced on the standing so far, however
+many there are. So the tournament runs in full on \emph{every} showdown ---
+practice, mock and final alike --- rather than only when someone remembers to
+set it up.
+
+Where a run needs a standing it did not produce itself --- the first balanced
+iteration of a fresh board --- it takes the last finished showdown \emph{of its
+own kind} (Section~\ref{sec:mock}), never whichever board happened to finish
+most recently.
 
 % =====================================================================
 \section{Mock auctions}
 \label{sec:mock}
 
 Two mock showdowns run before the deadline. They use \emph{the same engine, the
-same sandbox, the same scoring and the same aggregation} as the graded run ---
-there is no separate code path --- and differ in settings, in what is done with
-the result, and in one recorded fact: every showdown is stamped with what it was
-for.
+same sandbox, the same scoring, the same aggregation and the same tournament
+structure} as the graded run --- there is no separate code path, and a mock is
+not a reduced format. It plays the full sequence: iteration 1 on blind groups,
+every iteration after it strength-balanced on the standing so far. They differ
+only in size, in what is done with the result, and in one recorded fact: every
+showdown is stamped with what it was for.
 
 \begin{center}
 \begin{tabular}{@{}lll@{}}
@@ -535,9 +582,9 @@ live one.
 Variations   & 1, 2            & \ifreleased 1, 2, 3, 4\else all released\fi
              & \ifreleased 1, 2, 3, 4\else all released\fi \\
 Submissions  & optional        & optional          & required \\
-Grouping     & random          & random            & random $\times 2$, balanced, finals \\
+Grouping     & \multicolumn{3}{l}{the full tournament: iteration 1 random, the rest seeded} \\
 Iterations   & reduced         & reduced           & 3 qualification $+$ 2 finals \\
-Bounds       & throwaway       & throwaway         & the real hidden schedule \\
+Bounds       & \multicolumn{3}{l}{drawn from the run's own seed --- never reused} \\
 Counts towards the result & no & no                & yes \\
 Also does    & \multicolumn{2}{l}{releases variations 3 and 4 (mock 1)} & \\
 \bottomrule
@@ -553,10 +600,13 @@ Four things follow, and they are the whole point of running them.
   never been published, against whatever field submits by the deadline. A mock
   rank is a measurement, not a position.
 
-\item \textbf{The hidden bounds are different, deliberately.} The mocks are run
-  on a throwaway schedule. A bot tuned to the $\pi$ it earned in a mock is tuned
-  to a distribution that will not appear again --- which is the same trap the
-  local runner warns about, one level up.
+\item \textbf{The hidden bounds are different, deliberately.} Every iteration of
+  every run draws its own blocks from~\eqref{eq:bounds}, off a seed that is not
+  published until afterwards. There are $10^4$ possible blocks and no schedule is
+  ever reused, so a bot tuned to the $\pi$ it earned in a mock is tuned to a
+  distribution that will not appear again --- the same trap the local runner
+  warns about, one level up. This is why the bounds are no longer the
+  competition's principal secret: the seed is.
 
 \item \textbf{The per-block table is the deliverable, not the rank.} Each
   participant is sent their $(C^{\text{start}}_{b}, C^{\text{end}}_{b}, M_b,

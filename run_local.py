@@ -15,9 +15,11 @@ exactly as the competition does (problem statement capital resets).
 from __future__ import annotations
 
 import argparse
+import random
 from pathlib import Path
 
 from src.auction.capital import CapitalDraw
+from src.auction.distributions import draw_block_bounds
 from src.auction.engine import run_game
 from src.auction.loader import load_bot_class
 
@@ -26,15 +28,10 @@ SAMPLE_BOTS = [
     REPO_ROOT / "starter-kit" / "sample_bots" / f"sample_bot_{i}.py" for i in (1, 2, 3)
 ]
 
-# Four blocks of 500 rounds, deliberately different in both scale and width so a
-# regime change is actually visible. Not the real schedule -- that lives in the
-# admin console and `secret/config.py`.
-DEFAULT_BLOCK_BOUNDS = [
-    (0.0, 100.0),
-    (40.0, 60.0),
-    (0.0, 400.0),
-    (5.0, 25.0),
-]
+# Four blocks off the published grids, exactly as a showdown draws them
+# (`distributions.draw_block_bounds`). `--bounds-seed` pins the schedule so a run
+# can be repeated; leave it off and every run faces a fresh one.
+DEFAULT_BOUNDS_SEED = 0
 
 
 def _print_capital_curve(result, n_points: int = 10) -> None:
@@ -59,6 +56,8 @@ def main() -> None:
     ap.add_argument("--variation", type=int, choices=(1, 2, 3, 4), required=True)
     ap.add_argument("--rounds", type=int, default=2000)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--bounds-seed", type=int, default=DEFAULT_BOUNDS_SEED,
+                    help="pins the hidden block schedule; -1 draws a fresh one")
     ap.add_argument("--fixed-capital", type=float, default=None,
                     help="legacy fixed-capital mode; omit to redraw per block as the real game does")
     args = ap.parse_args()
@@ -69,10 +68,16 @@ def main() -> None:
 
     # The default is the real rule: capital redrawn from each block's hidden
     # maximum. `--fixed-capital` is only for pinning payoff arithmetic by hand.
+    num_blocks = max(1, -(-args.rounds // 500))
+    bounds = draw_block_bounds(
+        random.Random(None if args.bounds_seed < 0 else args.bounds_seed), num_blocks
+    )
+    print(f"\n  hidden blocks: {[(round(lo), round(hi)) for lo, hi in bounds]}")
+
     result = run_game(
         bot_classes,
         variation=args.variation,
-        block_bounds=DEFAULT_BLOCK_BOUNDS,
+        block_bounds=bounds,
         seed=args.seed,
         num_rounds=args.rounds,
         starting_capitals=args.fixed_capital,

@@ -12,6 +12,7 @@ Three gates, cheapest first:
 
 from __future__ import annotations
 
+import random
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,7 +20,7 @@ from pathlib import Path
 from sandbox.policy import check_source, describe
 from sandbox.runner import SandboxLimits
 from src.auction.capital import CapitalDraw
-from src.auction.distributions import normalise_block_bounds
+from src.auction.distributions import draw_block_bounds, normalise_block_bounds
 
 from .simulate import BotSpec, play_group
 
@@ -58,6 +59,7 @@ def validate(
     tmp_path: Path,
     *,
     expected_roll: str = "",
+    bounds_mode: str = "random",
     block_bounds=None,
     capital_draw: CapitalDraw | None = None,
     block_size: int = SMOKE_ROUNDS,
@@ -89,15 +91,25 @@ def validate(
             variation=variation,
         )
 
-    # `block_bounds` comes straight off the admin settings, which may hold either
-    # a flat schedule or one schedule per tournament iteration (§9) — see
-    # `normalise_block_bounds`. This smoke test only ever plays one game, so it
-    # always takes iteration 0's schedule; a malformed setting is refused with a
-    # ValueError rather than reaching ValueSampler and crashing the request.
-    try:
-        schedules = normalise_block_bounds(block_bounds or [(0.0, 100.0)])
-    except ValueError:
-        schedules = normalise_block_bounds([(0.0, 100.0)])
+    # The smoke test must face the same KIND of block a real game does, or a bot
+    # that only works on a hard-coded range passes here and dies in the showdown.
+    #
+    # Under the normal "random" mode that means drawing off the published grids —
+    # on a fresh seed each time, deliberately: a participant resubmitting learns
+    # nothing repeatable about the hidden bounds from the verdict.
+    #
+    # "fixed" takes the admin schedule, which may hold either a flat list or one
+    # per tournament iteration (§9) — see `normalise_block_bounds`. This only
+    # ever plays one game, so it takes iteration 0's; a malformed setting is
+    # refused with a ValueError rather than reaching ValueSampler and crashing
+    # the request.
+    if bounds_mode == "random":
+        schedules = [draw_block_bounds(random.Random(), 1)]
+    else:
+        try:
+            schedules = normalise_block_bounds(block_bounds or [(0.0, 100.0)])
+        except ValueError:
+            schedules = normalise_block_bounds([(0.0, 100.0)])
 
     # A short game against the sample bots: does it start, survive, and bid legally?
     result = play_group(

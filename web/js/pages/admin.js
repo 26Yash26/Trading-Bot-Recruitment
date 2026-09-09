@@ -358,17 +358,11 @@ function gameTab(settings, counts) {
       <div class="panel lg:col-span-2">
         ${panelHead(
           "Capital draw at every block boundary",
-          "Problem statement §3.1 — κ ~ U[lo, hi], capital = max(κ·M + u, floor·M)."
+          "Problem statement §3.1 — κ ~ U[lo, hi], capital = m + (M − m)·κ."
         )}
-        <div class="grid gap-5 p-6 sm:grid-cols-2 xl:grid-cols-5">
+        <div class="grid gap-5 p-6 sm:grid-cols-2">
           ${field("kappa_lo", "κ minimum", settings.kappa_lo, { step: "0.05", min: 0 })}
           ${field("kappa_hi", "κ maximum", settings.kappa_hi, { step: "0.05", min: 0 })}
-          ${field("jitter_lo", "Jitter u minimum", settings.jitter_lo, { step: "0.5" })}
-          ${field("jitter_hi", "Jitter u maximum", settings.jitter_hi, { step: "0.5" })}
-          ${field("floor_fraction", "Floor, as a fraction of M", settings.floor_fraction, {
-            step: "0.01",
-            min: 0,
-          })}
         </div>
         <p class="hair px-6 py-5 font-mono text-[11px] text-ink-2" data-capital-preview></p>
       </div>
@@ -411,7 +405,37 @@ function secretsTab(settings, isolation) {
     <div class="grid gap-6 lg:grid-cols-2">
       <div class="panel">
         ${panelHead("Hidden distribution", "Never sent to a browser except this page.")}
-        <div class="p-6">
+        <div class="hair-b p-6">
+          <span class="label">How each iteration's blocks are chosen</span>
+          <div class="mt-3 space-y-2">
+            ${[
+              ["random", "Drawn off the grids",
+               "m ∈ {10, 20, … 1000}, range ∈ {100, 200, … 10000}, M = m + range. A fresh schedule per iteration, from the seed below. 10,000 combinations, so nothing carries between showdowns."],
+              ["fixed", "The schedule below",
+               "Typed by hand. For reproducing one specific run — otherwise the same four blocks every iteration, which is learnable."],
+            ]
+              .map(
+                ([value, title, note]) => `
+              <button type="button" data-bounds-mode="${value}"
+                      class="panel-2 block w-full px-5 py-4 text-left transition-colors
+                             ${
+                               (settings.bounds_mode || "random") === value
+                                 ? "border-flame"
+                                 : "hover:border-line-2"
+                             }">
+                <span class="flex items-center gap-3">
+                  <span class="h-2 w-2 ${
+                    (settings.bounds_mode || "random") === value ? "bg-flame" : "bg-line-2"
+                  }"></span>
+                  <span class="text-sm font-semibold">${title}</span>
+                </span>
+                <span class="mt-2 block font-mono text-[10px] leading-relaxed text-ink-3">${note}</span>
+              </button>`
+              )
+              .join("")}
+          </div>
+        </div>
+        <div class="p-6 ${(settings.bounds_mode || "random") === "random" ? "opacity-40" : ""}">
           <div class="space-y-4">
             ${(settings.block_bounds || [])
               .map(
@@ -768,7 +792,7 @@ export async function renderAdmin(app) {
     "finals_size", "workers", "mem_mb", "seed", "submit_cooldown",
   ]);
   const floaty = new Set([
-    "round_timeout", "kappa_lo", "kappa_hi", "jitter_lo", "jitter_hi", "floor_fraction",
+    "round_timeout", "kappa_lo", "kappa_hi",
   ]);
 
   const collect = () => {
@@ -806,17 +830,17 @@ export async function renderAdmin(app) {
     };
     const kappaLo = read("kappa_lo", 0.5);
     const kappaHi = read("kappa_hi", 2.5);
-    const jitterLo = read("jitter_lo", -10);
-    const jitterHi = read("jitter_hi", 10);
-    const floor = read("floor_fraction", 0.05);
 
-    const M = 100;
-    const low = Math.max(kappaLo * M + jitterLo, floor * M);
-    const high = kappaHi * M + jitterHi;
+    // The two extremes of the published grids: the narrowest block anyone can
+    // draw, and the widest. The spread between them is the point of the rule.
+    const describe = (m, range) =>
+      `[${m}, ${m + range}] → ${(m + range * kappaLo).toFixed(0)}–` +
+      `${(m + range * kappaHi).toFixed(0)}`;
+
     node.textContent =
-      `With a block maximum of ${M}, starting capital lands between ` +
-      `${low.toFixed(1)} and ${high.toFixed(1)} — ` +
-      `${(low / M).toFixed(2)}× to ${(high / M).toFixed(2)}× the hidden maximum.` +
+      `Capital = m + (M − m)·κ, so κ is how many block-widths of headroom a bot ` +
+      `starts with. Narrowest block ${describe(1000, 100)}; ` +
+      `widest ${describe(10, 10000)}.` +
       (kappaHi < kappaLo ? "  ⚠ κ maximum is below κ minimum." : "");
   };
 
@@ -872,8 +896,14 @@ export async function renderAdmin(app) {
       })
     );
 
-    app.querySelectorAll('input[name^="kappa"], input[name^="jitter"], input[name="floor_fraction"]')
+    app.querySelectorAll('input[name^="kappa"]')
       .forEach((input) => input.addEventListener("input", paintCapitalPreview));
+
+    app.querySelectorAll("[data-bounds-mode]").forEach((button) =>
+      button.addEventListener("click", () =>
+        save({ bounds_mode: button.dataset.boundsMode })
+      )
+    );
 
     app.querySelector("[data-save]")?.addEventListener("click", () => save(collect()));
 

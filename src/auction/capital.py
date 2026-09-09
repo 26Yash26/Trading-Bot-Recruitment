@@ -3,13 +3,23 @@
 For each player independently, at the start of block b::
 
     kappa ~ U[0.5, 2.5]
-    y     = kappa * M_b            (M_b is that block's hidden maximum value)
-    u     ~ U[-10, 10]
-    C     = max(y + u, 0.05 * M_b)
+    C     = m_b + range_b * kappa        (range_b = M_b - m_b)
 
-So inside one block some bots start rich and some start poor, nobody is told
-anyone else's capital, and the floor only bites when M_b is small — it exists to
-stop a zero or negative starting capital.
+So capital is anchored to the block's *floor* and scaled by its *width*. Inside
+one block some bots start on half the block's range and some on two and a half
+times it; nobody is told anyone else's capital.
+
+Why this shape rather than a multiple of M_b alone. The block bounds are drawn
+on grids (``distributions.draw_block_bounds``) where m_b can be a large fraction
+of M_b — m_b = 1000 with a range of 100 gives M_b = 1100, a block where every
+value sits within 10% of every other. Scaling capital by M_b there would hand
+every bot roughly the same bankroll relative to the spread of values, which is
+the one thing the capital draw exists to vary. Scaling by the range keeps
+kappa's meaning constant: it is always "how many block-widths can I afford".
+
+It also removes two patches the old formula needed. m_b >= 10 and range >= 100,
+so the smallest possible capital is 10 + 100*0.5 = 60 -- comfortably positive,
+with no floor term, and no additive jitter to keep a small block off zero.
 
 The bounds are parameters rather than constants because the admin console can
 tune them between showdowns.
@@ -26,25 +36,16 @@ class CapitalDraw:
 
     kappa_lo: float = 0.5
     kappa_hi: float = 2.5
-    jitter_lo: float = -10.0
-    jitter_hi: float = 10.0
-    floor_fraction: float = 0.05
 
-    def draw(self, rng, block_max: float) -> float:
-        """One player's starting capital for a block with maximum ``block_max``."""
-        block_max = float(block_max)
+    def draw(self, rng, block_min: float, block_max: float) -> float:
+        """One player's starting capital for a block spanning ``[min, max]``."""
+        block_min = float(block_min)
+        block_range = float(block_max) - block_min
         kappa = rng.uniform(self.kappa_lo, self.kappa_hi)
-        jitter = rng.uniform(self.jitter_lo, self.jitter_hi)
-        return max(kappa * block_max + jitter, self.floor_fraction * block_max)
+        return block_min + block_range * kappa
 
     def as_dict(self) -> dict:
-        return {
-            "kappa_lo": self.kappa_lo,
-            "kappa_hi": self.kappa_hi,
-            "jitter_lo": self.jitter_lo,
-            "jitter_hi": self.jitter_hi,
-            "floor_fraction": self.floor_fraction,
-        }
+        return {"kappa_lo": self.kappa_lo, "kappa_hi": self.kappa_hi}
 
     @classmethod
     def from_settings(cls, settings: dict | None) -> "CapitalDraw":
@@ -53,7 +54,4 @@ class CapitalDraw:
         return cls(
             kappa_lo=float(settings.get("kappa_lo", base.kappa_lo)),
             kappa_hi=float(settings.get("kappa_hi", base.kappa_hi)),
-            jitter_lo=float(settings.get("jitter_lo", base.jitter_lo)),
-            jitter_hi=float(settings.get("jitter_hi", base.jitter_hi)),
-            floor_fraction=float(settings.get("floor_fraction", base.floor_fraction)),
         )

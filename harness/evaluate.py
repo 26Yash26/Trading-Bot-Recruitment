@@ -23,7 +23,7 @@ from pathlib import Path
 
 from sandbox.runner import SandboxLimits
 from src.auction.capital import CapitalDraw
-from src.auction.distributions import normalise_block_bounds
+from src.auction.distributions import draw_block_bounds, normalise_block_bounds
 
 from .simulate import BotOutcome, BotSpec, make_groups, play_group
 
@@ -65,6 +65,15 @@ class ShowdownSettings:
     )
     """Hidden value bounds. Either one schedule of blocks, reused by every
     iteration, or one schedule per iteration — see ``bounds_for_iteration``."""
+    bounds_mode: str = "random"
+    """How each iteration's hidden bounds are chosen.
+
+    ``"random"`` draws them off the published grids
+    (``distributions.draw_block_bounds``) from ``seed`` — the normal case, and
+    what makes a schedule impossible to carry from one showdown to the next.
+    ``"fixed"`` uses ``block_bounds`` verbatim, for reproducing a specific run.
+    """
+
     seed: int = 20260916
     workers: int = 4
     round_timeout: float = 1.0
@@ -105,11 +114,27 @@ class ShowdownSettings:
         """The block schedule iteration ``iteration`` (0-based) plays.
 
         Problem statement §9 wants iteration 2 to be a genuinely fresh draw —
-        "different value distributions", not the same ones under a new seed. So
-        the admin may supply one schedule per iteration. Supplying a single
-        schedule keeps the old behaviour, and a short list cycles, so three
-        schedules across five iterations is a legal thing to ask for.
+        "different value distributions", not the same ones under a new seed.
+
+        Under ``bounds_mode="random"`` that is automatic: every iteration draws
+        its own blocks off the grids, seeded on ``seed`` and the iteration index,
+        so the run is reproducible while no two iterations share a schedule and
+        nothing carries between showdowns.
+
+        Under ``"fixed"`` the admin supplies the schedule. One schedule is reused
+        by every iteration; a list of schedules is used one per iteration, and a
+        short list cycles, so three schedules across five iterations is a legal
+        thing to ask for.
+
+        Every group *within* one iteration gets the same bounds either way. They
+        have to: the standardised scores of two groups are only comparable if
+        both faced the same distribution, and a balanced or finals iteration
+        seeds on exactly that comparison.
         """
+        if self.bounds_mode == "random":
+            return draw_block_bounds(
+                random.Random(self.seed * 7919 + iteration), self.num_blocks
+            )
         schedules = normalise_block_bounds(self.block_bounds)
         return schedules[iteration % len(schedules)]
 

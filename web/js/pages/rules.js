@@ -159,9 +159,7 @@ export async function renderRules(app) {
     const blocks = state.num_blocks ?? 4;
     const groupSize = state.group_size ?? 20;
     const iterations = state.iterations ?? 3;
-    const capital = state.capital || {
-      kappa_lo: 0.5, kappa_hi: 2.5, jitter_lo: -10, jitter_hi: 10, floor_fraction: 0.05,
-    };
+    const capital = state.capital || { kappa_lo: 0.5, kappa_hi: 2.5 };
     const filenames = variations.length
       ? variations.map((id) => `ROLLNO_${id}.py`).join(", ")
       : "—";
@@ -234,12 +232,27 @@ export async function renderRules(app) {
               independently:
             </p>
             <div class="panel mt-6 p-6 font-mono text-sm leading-relaxed md:p-8" data-fade>
-              <p>κᵢ ~ U[${esc(capital.kappa_lo)}, ${esc(capital.kappa_hi)}]</p>
-              <p class="mt-2">yᵢ = κᵢ · M<sub>b</sub>
-                <span class="text-ink-3">— M<sub>b</sub> is that block's hidden maximum</span></p>
-              <p class="mt-2">uᵢ ~ U[${esc(capital.jitter_lo)}, ${esc(capital.jitter_hi)}]</p>
-              <p class="mt-4 text-flame">C⁽ᵇ'⁰⁾ᵢ = max(yᵢ + uᵢ, ${esc(capital.floor_fraction)} · M<sub>b</sub>)</p>
+              <p>m<sub>b</sub> ~ {10, 20, 30, … 1000}
+                <span class="text-ink-3">— the block's hidden minimum, in steps of 10</span></p>
+              <p class="mt-2">range<sub>b</sub> ~ {100, 200, 300, … 10000}
+                <span class="text-ink-3">— its width, in steps of 100</span></p>
+              <p class="mt-2">M<sub>b</sub> = m<sub>b</sub> + range<sub>b</sub>
+                <span class="text-ink-3">— so xᵢ ~ U[m<sub>b</sub>, M<sub>b</sub>]</span></p>
+              <p class="mt-4">κᵢ ~ U[${esc(capital.kappa_lo)}, ${esc(capital.kappa_hi)}]</p>
+              <p class="mt-2 text-flame">C⁽ᵇ'⁰⁾ᵢ = m<sub>b</sub> + range<sub>b</sub> · κᵢ</p>
             </div>
+            <p class="mt-6 max-w-2xl text-sm leading-relaxed text-ink-2" data-fade>
+              Both grids hold 100 values, so there are <b class="text-ink">10,000</b> possible blocks
+              and they span two orders of magnitude in <em>both</em> the floor and the width. The
+              minimum is not zero, and a block as narrow as [1000, 1100] is as likely as one as wide
+              as [10, 10010] — a bot that assumes values start at zero, or that they are "about a
+              hundred", is being measured on exactly that assumption.
+            </p>
+            <p class="mt-4 max-w-2xl text-sm leading-relaxed text-ink-2" data-fade>
+              Capital scales with the <em>width</em>, not the maximum, so κ always means the same
+              thing: how many block-widths of headroom you start with. Nothing is announced — not
+              m<sub>b</sub>, not the range, not when a block changes.
+            </p>
             <div class="mt-8 grid gap-px bg-line md:grid-cols-2" data-fade>
               <div class="bg-void p-6 md:p-8">
                 <h3 class="d4 font-display">It does not carry over</h3>

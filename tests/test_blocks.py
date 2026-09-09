@@ -86,17 +86,53 @@ def test_capital_draw_stays_inside_the_problem_statement_range():
     rng = random.Random(7)
     draw = CapitalDraw()
     for _ in range(200):
-        capital = draw.draw(rng, 100.0)
-        # kappa in [0.5, 2.5] times M, plus jitter in [-10, 10], floored at 0.05 M.
-        assert 5.0 <= capital <= 2.5 * 100.0 + 10.0
+        # C = m_b + (M_b - m_b) * kappa, kappa in [0.5, 2.5].
+        capital = draw.draw(rng, 200.0, 1200.0)
+        assert 200.0 + 1000.0 * 0.5 <= capital <= 200.0 + 1000.0 * 2.5
 
 
-def test_capital_draw_floor_bites_when_the_block_maximum_is_small():
+def test_capital_is_the_floor_plus_kappa_block_widths():
+    """The reason the formula uses the range rather than the maximum.
+
+    kappa means "how many block-widths of headroom I start with", and that
+    meaning has to hold whatever the block looks like. Two blocks can share a
+    maximum of 1100 and be completely different games — [1000, 1100], where
+    every value sits within 10% of every other, against [10, 1100], which spans
+    two orders of magnitude. Scaling capital by M_b would hand out the same
+    bankroll in both; scaling by the width does not.
+    """
     import random
 
-    rng = random.Random(3)
+    narrow = CapitalDraw().draw(random.Random(1), 1000.0, 1100.0)
+    wide = CapitalDraw().draw(random.Random(1), 10.0, 1100.0)
+
+    # Same seed, so the same kappa: the headroom above the floor is exactly
+    # kappa block-widths in each, and the two widths differ by 10.9x.
+    assert (wide - 10.0) / (narrow - 1000.0) == pytest.approx(1090.0 / 100.0)
+
+    kappa_narrow = (narrow - 1000.0) / 100.0
+    kappa_wide = (wide - 10.0) / 1090.0
+    assert kappa_narrow == pytest.approx(kappa_wide)
+    assert 0.5 <= kappa_narrow <= 2.5
+
+
+def test_capital_is_always_positive_on_the_published_grids():
+    """m_b >= 10 and range >= 100, so the smallest draw is 10 + 100*0.5 = 60.
+    That is what lets the formula drop the old floor and jitter terms."""
+    import random
+
+    from src.auction.distributions import BLOCK_MIN_CHOICES, BLOCK_RANGE_CHOICES
+
+    rng = random.Random(0)
     draw = CapitalDraw()
-    assert draw.draw(rng, 1.0) >= 0.05
+    smallest = draw.draw(rng, min(BLOCK_MIN_CHOICES),
+                         min(BLOCK_MIN_CHOICES) + min(BLOCK_RANGE_CHOICES))
+    assert smallest >= 60.0
+
+    for _ in range(500):
+        lo = float(rng.choice(BLOCK_MIN_CHOICES))
+        hi = lo + float(rng.choice(BLOCK_RANGE_CHOICES))
+        assert draw.draw(rng, lo, hi) >= 60.0
 
 
 # --- the engine's block loop ---------------------------------------------------
@@ -115,7 +151,9 @@ def test_capital_is_redrawn_at_a_block_boundary_and_does_not_carry_over():
         num_rounds=4,
         block_size=2,
         capital_draw=CapitalDraw(),
-        sampler=FixedSampler([[0.0, 0.0]] * 4),
+        # A non-degenerate block: capital scales with the width, so a sampler
+        # with no width at all would hand every player a capital of zero.
+        sampler=FixedSampler([[0.0, 50.0]] * 4),
     )
     blocks = result.players[0].blocks
     assert len(blocks) == 2

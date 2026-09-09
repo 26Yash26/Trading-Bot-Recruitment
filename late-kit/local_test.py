@@ -29,8 +29,11 @@ Only the auctions on the competition site count.
 Public rules this file implements (all of them are in the problem statement):
   * 2000 rounds, four blocks of 500;
   * every block redraws the hidden value distribution AND your capital;
-  * capital: kappa ~ U[0.5, 2.5], y = kappa * M_b, u ~ U[-10, 10],
-    C = max(y + u, 0.05 * M_b);
+  * each block's bounds are drawn off two grids:
+        m_b     from {10, 20, ..., 1000}       (100 values, step 10)
+        range_b from {100, 200, ..., 10000}    (100 values, step 100)
+        M_b = m_b + range_b,  and x ~ U[m_b, M_b];
+  * capital: kappa ~ U[0.5, 2.5], C = m_b + range_b * kappa;
   * V1 and V2: highest bid wins, ties all win and each collects the full
     payoff. V3 and V4 need distinct ranks, so ties there are broken at random;
   * V1 winner takes x_i - b1; V2 winner takes X - b1; V3 winner takes X - b1
@@ -213,25 +216,38 @@ def settle_ranked(variation: int, values, bids, max_value: float, rng):
 # --- the game ------------------------------------------------------------------
 
 
+# The two grids every block's hidden bounds are drawn from. These are the real
+# ones -- the same code the competition runs. What you do NOT get is the seed,
+# so you cannot know which of the 10,000 combinations you will actually face.
+BLOCK_MIN_CHOICES = tuple(range(10, 1001, 10))        # m_b:     10 .. 1000, step 10
+BLOCK_RANGE_CHOICES = tuple(range(100, 10001, 100))   # range_b: 100 .. 10000, step 100
+
+
 def draw_block_bounds(rng: random.Random) -> list[tuple[float, float]]:
     """Four hidden (m_b, M_b) pairs, different every seed.
 
-    Deliberately varied in scale and width: the real blocks differ from each
-    other too, and a bot that assumes one fixed range will be caught out.
+    m_b is NOT zero and the width is not fixed: blocks vary by two orders of
+    magnitude in both, so `x - m_b` and `M_b - x` are different problems from one
+    block to the next. A bot that assumes the values start at zero, or that they
+    are "about 100", will be caught out.
     """
     bounds = []
     for _ in range(NUM_ROUNDS // BLOCK_SIZE):
-        top = rng.choice([10.0, 50.0, 100.0, 200.0, 500.0]) * rng.uniform(0.6, 1.4)
-        lo = top * rng.uniform(0.0, 0.5)
-        bounds.append((lo, top))
+        lo = float(rng.choice(BLOCK_MIN_CHOICES))
+        width = float(rng.choice(BLOCK_RANGE_CHOICES))
+        bounds.append((lo, lo + width))
     return bounds
 
 
-def starting_capital(rng: random.Random, block_max: float) -> float:
-    """Problem statement, capital resets: max(kappa * M_b + u, 0.05 * M_b)."""
+def starting_capital(rng: random.Random, block_min: float, block_max: float) -> float:
+    """Problem statement, capital resets: C = m_b + (M_b - m_b) * kappa.
+
+    kappa is how many block-widths of headroom you start with. It is the same
+    idea whether the block spans [10, 10010] or [1000, 1100] -- which is the
+    point, because those are completely different games.
+    """
     kappa = rng.uniform(0.5, 2.5)
-    jitter = rng.uniform(-10.0, 10.0)
-    return max(kappa * block_max + jitter, 0.05 * block_max)
+    return block_min + (block_max - block_min) * kappa
 
 
 def play(bot_classes, variation: int, seed: int, num_rounds: int):
@@ -241,7 +257,7 @@ def play(bot_classes, variation: int, seed: int, num_rounds: int):
     num_blocks = max(1, math.ceil(num_rounds / BLOCK_SIZE))
 
     seats = [
-        Seat(cls, i, variation, starting_capital(rng, bounds[0][1]))
+        Seat(cls, i, variation, starting_capital(rng, *bounds[0]))
         for i, cls in enumerate(bot_classes)
     ]
 
@@ -259,7 +275,7 @@ def play(bot_classes, variation: int, seed: int, num_rounds: int):
 
         if block > 0:
             for seat in seats:
-                seat.begin_block(starting_capital(rng, block_max))
+                seat.begin_block(starting_capital(rng, lo, block_max))
 
         block_start_caps = [s.capital for s in seats]
 

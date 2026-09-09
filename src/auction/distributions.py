@@ -68,6 +68,43 @@ class FixedSampler:
         return v
 
 
+# --- the hidden bounds ---------------------------------------------------------
+#
+# Each block's [m_b, M_b] is drawn from two grids rather than typed in by hand:
+#
+#     m_b     in {10, 20, ..., 1000}        100 values, step 10
+#     range_b in {100, 200, ..., 10000}     100 values, step 100
+#     M_b = m_b + range_b
+#
+# 10,000 combinations spanning two orders of magnitude in both the floor and the
+# width. That is the point: a bot cannot learn "the values are around 300" from
+# one showdown and carry it to the next, and it cannot assume the floor is zero.
+# Blocks vary in scale AND in width, so `x - m_b` and `M_b - x` are different
+# problems from one block to the next.
+#
+# A hand-typed schedule stayed possible (`bounds_mode = "fixed"`) because the
+# engine tests pin payoff arithmetic against known bounds, and because an admin
+# may want to reproduce a specific run.
+
+BLOCK_MIN_CHOICES = tuple(range(10, 1001, 10))
+BLOCK_RANGE_CHOICES = tuple(range(100, 10001, 100))
+
+
+def draw_block_bounds(rng, num_blocks: int) -> list[tuple[float, float]]:
+    """``num_blocks`` independent ``(m_b, M_b)`` pairs off the grids above.
+
+    ``rng`` is a ``random.Random``, so a seed reproduces the schedule exactly —
+    which is what lets a showdown be replayed and what keeps every group inside
+    one iteration on the same bounds.
+    """
+    bounds = []
+    for _ in range(max(1, int(num_blocks))):
+        lo = float(rng.choice(BLOCK_MIN_CHOICES))
+        width = float(rng.choice(BLOCK_RANGE_CHOICES))
+        bounds.append((lo, lo + width))
+    return bounds
+
+
 def normalise_block_bounds(value, *, num_blocks: int | None = None):
     """Coerce admin-supplied block bounds into ``[iteration][block] -> (lo, hi)``.
 

@@ -128,25 +128,28 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "group_size": 20,
     # The tournament (§9): how many iterations, and how groups are drawn.
     "iterations": 3,
-    # One mode for every iteration, or one per iteration (§9). A list plays the
-    # whole tournament in one run: ["random", "random", "balanced"] is
-    # qualification, and a list shorter than `iterations` holds its last entry.
-    "grouping": "random",          # random | balanced | finals, or a list of them
+    # One mode for every iteration, or one per iteration (§9). A list shorter
+    # than `iterations` holds its last entry, so the default below means
+    # "iteration 1 draws blind, and every iteration after it is seeded on the
+    # standing so far" — the tournament, run in full, on every showdown.
+    "grouping": ["random", "balanced"],   # random | balanced | finals
     "finals_size": 20,
-    # The capital draw at every block boundary (§3.1).
+    # The capital draw at every block boundary (§3.1):
+    #   C = m_b + (M_b - m_b) * kappa,  kappa ~ U[kappa_lo, kappa_hi]
     "kappa_lo": 0.5,
     "kappa_hi": 2.5,
-    "jitter_lo": -10.0,
-    "jitter_hi": 10.0,
-    "floor_fraction": 0.05,
-    # Never leaves the server. Either one schedule of four blocks (reused by
-    # every iteration) or one schedule per iteration — see
+    # How each iteration's hidden bounds are chosen. "random" draws m_b and the
+    # range off the published grids from `seed`; "fixed" uses `block_bounds`
+    # below verbatim, for reproducing one specific run.
+    "bounds_mode": "random",
+    # Only consulted when `bounds_mode` is "fixed". Never leaves the server.
+    # Either one schedule of four blocks (reused by every iteration) or one
+    # schedule per iteration — see
     # `src.auction.distributions.normalise_block_bounds`.
     #
-    # These four differ in BOTH scale and width on purpose. Four identical
-    # blocks would mean there is no regime change to detect, which switches off
-    # the whole point of the block structure. Replace them with the real hidden
-    # values from the admin console before the first scored auction.
+    # These differ in BOTH scale and width on purpose. Identical blocks would
+    # mean there is no regime change to detect, which switches off the whole
+    # point of the block structure.
     "block_bounds": [
         [[0.0, 100.0], [40.0, 60.0], [0.0, 400.0], [5.0, 25.0]],
         [[10.0, 30.0], [0.0, 250.0], [60.0, 90.0], [0.0, 50.0]],

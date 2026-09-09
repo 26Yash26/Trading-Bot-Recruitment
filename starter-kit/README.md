@@ -116,6 +116,30 @@ accepted file per variation is the one that plays.
 
 ---
 
+## The blocks you are playing
+
+Every block draws its own hidden bounds, and neither is announced:
+
+```
+m_b      from {10, 20, 30, ... 1000}        the block's minimum, step 10
+range_b  from {100, 200, 300, ... 10000}    its width, step 100
+M_b = m_b + range_b                         so x ~ U[m_b, M_b]
+```
+
+That is 10,000 possible blocks, spanning two orders of magnitude in **both** the
+floor and the width. Three things follow, and they are the whole problem:
+
+- **The minimum is not zero.** `x` never comes from `U[0, M]`. A block can be
+  [1000, 1100], where every value sits within 10% of every other.
+- **The width is not fixed.** [10, 10010] and [1000, 1100] are both ordinary
+  blocks, and they are completely different games.
+- **Your capital scales with the width**, not the maximum, so `κ` always means
+  the same thing: how many block-widths of headroom you start with.
+
+You are told none of it. All you ever see is your own `x` each round, and
+`max_value_last_round` if your variation gets it. Working out roughly where the
+block sits, and noticing when it changes, is the problem.
+
 ## Rules your bot has to live with
 
 - **Under 1 second per round.** Exceed it and that round is filed as a bid of 0.
@@ -162,9 +186,10 @@ are worth stating plainly:
 
 - **A block is scored on its own.** Capital does not carry across a boundary.
   Four blocks, four independent tests.
-- **Your capital is redrawn every block**, anywhere from roughly half to
-  two-and-a-half times the hidden maximum. A bot that plays the same way on a
-  thin bankroll as on a fat one is being measured, and it will show.
+- **Your capital is redrawn every block** as `m_b + range_b · κ` with
+  `κ ~ U[0.5, 2.5]` — half to two-and-a-half block-*widths* of headroom above
+  the block's floor. A bot that plays the same way on a thin bankroll as on a
+  fat one is being measured, and it will show.
 - **Consistency beats one good block.** Your spread across the four blocks and
   your worst block are both reported.
 - **Bankruptcy is heavily penalised.** You forfeit the rest of the block.

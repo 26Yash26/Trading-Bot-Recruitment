@@ -11,6 +11,17 @@ publication after the event.
 
 # Hidden uniform bounds (lo, hi) for x_i.
 #
+# ONLY CONSULTED WHEN THE ADMIN CONSOLE'S `bounds_mode` IS "fixed".
+#
+# The normal mode is "random": every iteration draws its own blocks off the
+# published grids -- m_b from {10, 20, ... 1000} and range from
+# {100, 200, ... 10000}, M_b = m_b + range -- seeded from MASTER_SEED below.
+# That is what stops a schedule being learned in one showdown and carried into
+# the next, and it is why these bounds are no longer the competition's main
+# secret; the seed is. A hand-written schedule here is for reproducing one
+# specific run, and for the engine tests, which need known bounds to pin payoff
+# arithmetic against.
+#
 # Either one schedule of four blocks, reused by every iteration:
 #
 #     BLOCK_BOUNDS = [(0.0, 100.0), (40.0, 60.0), (0.0, 400.0), (5.0, 25.0)]
@@ -36,10 +47,9 @@ BLOCK_BOUNDS = [
 ]
 
 # Starting capital is NOT set here. It is redrawn per player per block from the
-# block's own hidden maximum -- kappa ~ U[0.5, 2.5], y = kappa * M_b,
-# u ~ U[-10, 10], C = max(y + u, 0.05 * M_b) -- and the multipliers are tunable
-# from the admin console (`kappa_lo`, `kappa_hi`, `jitter_lo`, `jitter_hi`,
-# `floor_fraction`). See `src/auction/capital.py`.
+# block's own floor and width -- kappa ~ U[0.5, 2.5],
+# C = m_b + (M_b - m_b) * kappa -- and the multipliers are tunable
+# from the admin console (`kappa_lo`, `kappa_hi`). See `src/auction/capital.py`.
 
 # Master RNG seed. Per-run seeds are derived from this so runs are reproducible.
 # Publish it after the event, with the bounds above, so results can be checked.

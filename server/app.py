@@ -477,6 +477,7 @@ async def api_submit(
                 lambda: validate(
                     filename, source, tmp_path,
                     expected_roll=expected_roll,
+                    bounds_mode=str(settings.get("bounds_mode", "random")),
                     block_bounds=settings.get("block_bounds"),
                     capital_draw=CapitalDraw.from_settings(settings),
                     limits=limits,
@@ -623,6 +624,12 @@ async def admin_update_settings(request: Request, admin: dict = Depends(require_
 
     if "grouping" in changes:
         changes["grouping"] = normalise_grouping_setting(changes["grouping"])
+
+    if "bounds_mode" in changes:
+        if changes["bounds_mode"] not in ("random", "fixed"):
+            raise HTTPException(
+                status_code=400, detail="bounds_mode must be 'random' or 'fixed'."
+            )
 
     # The hidden bounds are the one setting that can break every game at once:
     # M_b divides the normalised profit and scales the capital draw, so a zero,
