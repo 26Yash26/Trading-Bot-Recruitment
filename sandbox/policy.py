@@ -29,11 +29,23 @@ ALLOWED_MODULES = frozenset(
 )
 
 # Builtins that hand back the interpreter itself.
+#
+# __builtins__, __loader__ and __spec__ belong here, not just in _ESCAPE_ATTRS:
+# they are implicit BARE globals in every module's namespace (no import, no
+# attribute access needed), and CPython gives a non-__main__ module's
+# __builtins__ as a *dict*, not the builtins module — so `__builtins__.eval` is
+# an AttributeError, but `__builtins__["eval"]` hands back the real eval() with
+# nothing else in this file noticing, because Subscript is not inspected at
+# all. __loader__/__spec__ carry a loader object whose get_data(path) reads an
+# arbitrary file. Confirmed against child.py's own loading mechanism:
+#   _e = __builtins__["eval"]; _e("__import__('os').getcwd()")
+# passed check_source() with zero violations before this fix.
 BANNED_NAMES = frozenset(
     {
         "eval", "exec", "compile", "open", "__import__", "input", "breakpoint",
         "globals", "locals", "vars", "getattr", "setattr", "delattr", "dir",
         "exit", "quit", "help", "memoryview", "super", "object",
+        "__builtins__", "__loader__", "__spec__",
     }
 )
 
@@ -46,6 +58,17 @@ _ESCAPE_ATTRS = frozenset(
         "__getattribute__", "__init_subclass__", "__loader__", "__spec__",
     }
 )
+
+# `.format` / `.format_map` / `.vformat` are a second, unrelated route to the
+# same destination: the dotted path in `"{0.__class__.__bases__}".format(x)`
+# lives inside a string literal, so it is never an ast.Attribute node at all —
+# nothing above ever sees it. string.Formatter (string IS an allowed import)
+# reaches the identical mini-language via .vformat. There is no legitimate use
+# a bidding bot has for template formatting that an f-string (whose
+# interpolated attributes DO go through visit_Attribute, since Python parses
+# them as real expressions) or %-formatting (whose spec language has no
+# attribute-drilling syntax at all) cannot do just as well.
+_FORMAT_ATTRS = frozenset({"format", "format_map", "vformat"})
 
 MAX_SOURCE_BYTES = 512 * 1024
 MAX_AST_NODES = 200_000
@@ -97,6 +120,18 @@ class _Visitor(ast.NodeVisitor):
         if name.startswith("__") and name.endswith("__"):
             why = "escapes the sandbox" if name in _ESCAPE_ATTRS else "is not allowed"
             self._flag(node, f"attribute '{name}' {why}")
+        elif name in BANNED_NAMES:
+            # A banned name is just as dangerous reached via `.name` on some
+            # other allowed object as it is called bare — `mod.eval`, not just
+            # `eval`. The dunder check above never fires for these since none
+            # of eval/exec/open/... are dunder-shaped.
+            self._flag(node, f"attribute '{name}' is not allowed")
+        elif name in _FORMAT_ATTRS:
+            self._flag(
+                node,
+                f"'{name}' is not allowed — it can read attributes named in a "
+                "string, invisibly to this check; use an f-string or % formatting",
+            )
         self.generic_visit(node)
 
     # --- statements that only make sense for an escape -----------------------
