@@ -168,6 +168,41 @@ Open `/admin` (signed in with an email from `QG_ADMIN_EMAILS`):
 
 ---
 
+## One-time: adopt the self-syncing deploy script
+
+**Run this once, before the orientation session.** Until it is done, changes to
+`deploy/nginx-app.conf` and `deploy/apply-deploy.sh` are committed to the repo
+and never reach production.
+
+The systemd unit runs `/opt/quantguild/bin/apply-deploy.sh` and nginx reads
+`/etc/nginx/snippets/quantguild-app.conf` — both are *copies* installed by
+`setup_vm.sh`, which is run by hand. So the repo can say one thing while the VM
+does another, with nothing to indicate it. `apply-deploy.sh` now syncs the nginx
+snippet on every deploy, but that change cannot install itself.
+
+```bash
+cd /var/www/html
+git log -1 --format='%h %s'          # confirm the deploy landed first
+
+# The caching fix — static assets must revalidate, or a deploy strands anyone
+# with the site open on a half-stale ES module graph (blank page, no error).
+sudo install -m 644 deploy/nginx-app.conf /etc/nginx/snippets/quantguild-app.conf
+sudo nginx -t && sudo systemctl reload nginx
+
+# The script that will keep the above in sync from now on.
+sudo install -m 755 deploy/apply-deploy.sh /opt/quantguild/bin/apply-deploy.sh
+```
+
+Verify from anywhere:
+
+```bash
+curl -sI https://quantguildiitm.in/web/js/main.js | grep -i cache-control
+# want exactly:  Cache-Control: no-cache
+# not:           Cache-Control: public, max-age=3600
+```
+
+After this, a normal `git push` carries nginx changes too.
+
 ## Operations
 
 | Task | How |
