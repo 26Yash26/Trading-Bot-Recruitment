@@ -171,7 +171,9 @@ function showdownTab(settings, schedule, counts) {
         <div class="panel">
           ${panelHead(
             "Cadence",
-            `The practice board replays the whole field ${esc(describeInterval(settings.interval_minutes))}.`
+            settings.showdown_enabled
+            ? `Unattended rehearsals run ${esc(describeInterval(settings.interval_minutes))}. They are private: only mock rounds and the finals are published.`
+            : "Rounds are announced, not run on a timer. Start one with the buttons below."
           )}
           <div class="space-y-4 p-6">
             ${toggle(
@@ -649,7 +651,7 @@ function historyTab(showdowns, audit) {
                   .map(
                     (row) => `
             <div class="panel-2 mb-2 px-4 py-3">
-              <div class="flex items-center justify-between font-mono text-[11px]">
+              <div class="flex items-center justify-between gap-3 font-mono text-[11px]">
                 <span class="${
                   row.status === "done"
                     ? "text-gain"
@@ -657,7 +659,13 @@ function historyTab(showdowns, audit) {
                       ? "text-flame"
                       : "text-loss"
                 }">#${row.id} ${esc(row.status)}</span>
-                <span class="text-ink-3">${esc(relativeTime(row.started_at))}</span>
+                <span class="ml-auto text-ink-3">${esc(relativeTime(row.started_at))}</span>
+                <button type="button" data-delete-showdown="${row.id}"
+                        data-showdown-kind="${esc(row.kind || "practice")}"
+                        title="Delete this board and every result in it"
+                        class="border border-line-2 px-2 py-0.5 text-[10px] text-ink-3
+                               transition-colors hover:border-loss hover:text-loss"
+                        ${row.status === "running" ? "disabled" : ""}>delete</button>
               </div>
               <p class="mt-2 font-mono text-[10px] ${
                 row.kind && row.kind !== "practice" ? "text-flame" : "text-ink-3"
@@ -1058,6 +1066,30 @@ export async function renderAdmin(app) {
         } catch (error) {
           toast(error.message, "error");
           app.querySelectorAll("[data-run-now]").forEach((b) => (b.disabled = false));
+        }
+      })
+    );
+
+    app.querySelectorAll("[data-delete-showdown]").forEach((button) =>
+      button.addEventListener("click", async () => {
+        const id = button.dataset.deleteShowdown;
+        const kind = button.dataset.showdownKind;
+        // A published board is something participants have already seen, and
+        // deleting it makes the one before it current again. Worth a prompt.
+        const warning =
+          kind === "practice"
+            ? `Delete rehearsal #${id}?`
+            : `Delete ${kind} board #${id}? It is published, and the board before it becomes current again.`;
+        if (!confirm(warning)) return;
+        button.disabled = true;
+        try {
+          await api.admin.deleteShowdown(id);
+          toast(`Showdown #${id} deleted.`, "ok");
+          await load();
+          paint();
+        } catch (error) {
+          toast(error.message, "error");
+          button.disabled = false;
         }
       })
     );

@@ -64,6 +64,8 @@ export const api = {
       json("POST")("/admin/run-now", variations ? { kind, variations } : { kind }),
     submissions: () => request("/admin/submissions"),
     showdowns: () => request("/admin/showdowns"),
+    deleteShowdown: (id) =>
+      request(`/admin/showdowns/${encodeURIComponent(id)}`, { method: "DELETE" }),
     audit: () => request("/admin/audit"),
     ban: (roll, banned) =>
       json("POST")("/admin/ban", { roll, banned }),

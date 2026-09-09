@@ -12,7 +12,7 @@ submissions into a leaderboard, and a **server** that puts it on the web.
      │
      └──/api/──▶ server/app.py ──┬── server/store.py      SQLite: users, sessions,
                                  │                        submissions, results, audit
-                                 ├── server/scheduler.py  the 2-hourly clock
+                                 ├── server/scheduler.py  runs a showdown
                                  └── server/events.py     SSE fan-out
                                             │
                                             ▼
@@ -86,10 +86,10 @@ process pool → aggregate per `(roll, variation)` into score, mean/worst/spread
 π, survival and raw profit → rank → write to `results` → publish over SSE.
 
 The kind is not a label. `mock` and `final` boards are archived and stay
-reachable (`GET /api/leaderboard?showdown=<id>`) after the two-hourly practice
-clock has replaced the live one, and a balanced or finals run seeds only on the
-last finished run **of its own kind**, otherwise its snake seeding is built from
-whichever practice run happened to land most recently. `docs/scoring.tex` §7-8
+reachable (`GET /api/leaderboard?showdown=<id>`), and a balanced or finals run
+seeds only on the last finished run **of its own kind**, so a private rehearsal
+cannot decide the groups of an announced round. There is no live board: only
+`mock` and `final` boards are public. `docs/scoring.tex` §7-8
 is the normative description.
 
 ## The frontend has no build step

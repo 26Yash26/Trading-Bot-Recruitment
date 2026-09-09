@@ -299,6 +299,27 @@ only on the Save button while the grouping buttons saved immediately, so typing
 5 and then clicking a grouping repainted the page and threw the 5 away, and the
 extra iterations could never be given a mode. The number field is gone.
 
+### Deleting a board
+
+Admin → History → **delete** on the row. It removes the showdown and every
+result in it.
+
+Deleting the newest mock makes the one before it current again, on the site and
+as the standing that the next mock seeds its balanced iterations on. That is the
+point: it is how a bad round is undone. A running showdown cannot be deleted,
+and every deletion is audited.
+
+### There is no live board
+
+The site publishes the mock rounds and the finals. Nothing runs between them:
+`showdown_enabled` is off, so no timer fires, and Admin → Showdown is where a
+round is started.
+
+A run stamped **practice** is a private rehearsal. It never reaches the board,
+the archive or `/api/state`, so it is the safe way to prove the pipeline before
+an announced round. It still seeds the next rehearsal, and never an announced
+round.
+
 ### Running one variation at a time
 
 The variation chips above the Run buttons say what **this run** covers. They are

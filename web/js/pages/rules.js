@@ -441,8 +441,8 @@ export async function renderRules(app) {
               error of a bot's mean block score to fall well below the gaps that matter. Final ranking
               is the sum of the two finals iterations, tie-broken by the qualification total. Mock
               auctions run the same machinery at reduced size, with per-block statistics published so
-              you can see where your bot broke. This practice board runs
-              ${esc(iterations)} ${iterations === 1 ? "iteration" : "iterations"} at a time.
+              you can see where your bot broke. Every board is published once and kept; nothing
+              runs between rounds.
             </p>
           </div>
 

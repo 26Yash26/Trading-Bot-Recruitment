@@ -218,7 +218,10 @@ def public_state() -> dict:
     open, the announcement, reaches every open tab without a reload.
     """
     settings = store.public_settings()
-    latest = store.latest_showdown()
+    # The public "last showdown" is the last PUBLISHED one. A practice rehearsal
+    # is invisible to participants, including its timestamp.
+    published = store.published_showdowns(limit=1)
+    latest = published[0] if published else None
     num_rounds = int(settings.get("num_rounds", 2000))
     block_size = max(1, int(settings.get("block_size", 500)))
     return {
@@ -256,15 +259,19 @@ def api_state():
 
 @app.get("/api/leaderboard")
 def api_leaderboard(showdown: int | None = None):
-    """The live board, or an archived one by id.
+    """A published board: the newest by default, or one named by id.
 
-    An id is only honoured for a finished **mock or final** run. Practice boards
-    are not addressable: there are hundreds of them, they mean nothing, and
-    handing out an id for one invites a stale link being passed around as a
-    result.
+    There is no rolling live board. The site shows mock rounds and the finals,
+    so an id is only honoured for one of those; a practice run is a private
+    rehearsal and is not addressable.
     """
     if showdown is None:
-        return {"rows": store.leaderboard(), "state": scheduler.state(), "showdown": None}
+        published = store.published_showdowns(limit=1)
+        return {
+            "rows": store.leaderboard(kinds=store.PUBLISHED_KINDS),
+            "state": scheduler.state(),
+            "showdown": published[0] if published else None,
+        }
 
     published = {int(row["id"]): row for row in store.published_showdowns(limit=200)}
     row = published.get(int(showdown))
@@ -289,7 +296,11 @@ async def api_leaderboard_stream(request: Request):
 
     async def generator():
         try:
-            yield f"event: leaderboard\ndata: {JSONResponse(store.leaderboard()).body.decode()}\n\n"
+            yield (
+                "event: leaderboard\ndata: "
+                + JSONResponse(store.leaderboard(kinds=store.PUBLISHED_KINDS)).body.decode()
+                + "\n\n"
+            )
             while True:
                 if await request.is_disconnected():
                     return
@@ -733,6 +744,38 @@ def admin_showdowns(admin: dict = Depends(require_admin)):
         "showdowns": store.showdown_history(),
         "kinds": list(store.SHOWDOWN_KINDS),
     }
+
+
+@app.delete("/api/admin/showdowns/{showdown_id}")
+async def admin_delete_showdown(
+    showdown_id: int, request: Request, admin: dict = Depends(require_admin)
+):
+    """Delete a showdown and every result it holds.
+
+    Published boards are what the site shows, so removing one changes what
+    participants see: the board before it becomes current again, and it becomes
+    the standing that the next run of that kind seeds its balanced iterations
+    on. A running showdown cannot be deleted, because its rows are still being
+    written.
+    """
+    security.require_same_origin(request)
+    if scheduler.running and scheduler.current_id == int(showdown_id):
+        raise HTTPException(
+            status_code=409,
+            detail="That showdown is still running. Wait for it to finish.",
+        )
+
+    removed = store.delete_showdown(int(showdown_id))
+    if removed is None:
+        raise HTTPException(status_code=404, detail="No showdown with that id.")
+
+    store.audit(
+        admin["email"], "delete-showdown",
+        f"id={showdown_id} kind={removed.get('kind')} games={removed.get('games')}",
+    )
+    events.publish("leaderboard", store.leaderboard(kinds=store.PUBLISHED_KINDS))
+    events.publish("state", public_state())
+    return {"ok": True, "deleted": removed}
 
 
 @app.get("/api/admin/audit")

@@ -622,3 +622,134 @@ def test_a_stored_schedule_is_left_alone(tmp_path):
     row = conn.execute("SELECT value FROM settings WHERE key='grouping'").fetchone()
     assert json.loads(row["value"]) == mine
     conn.close()
+
+
+# --- no live board: only mock rounds and the finals ------------------------------
+
+
+def test_practice_runs_are_invisible_to_participants(finished_showdowns):
+    """There is no rolling board. A practice run is a private rehearsal, so it
+    must not reach the public leaderboard, the archive, or `/api/state`."""
+    public = store.leaderboard(kinds=store.PUBLISHED_KINDS)
+    assert "BOTPRACTICE" not in {row["key"] for row in public}
+    assert {"BOTMOCK", "BOTFINAL"} & {row["key"] for row in public}
+
+
+def test_the_public_state_reports_the_last_PUBLISHED_run(client, finished_showdowns):
+    body = client.get("/api/state").json()
+    assert body["last_showdown"]["kind"] in store.PUBLISHED_KINDS
+    assert body["last_showdown"]["id"] != finished_showdowns["practice"]
+
+
+def test_the_public_leaderboard_never_serves_a_rehearsal(client, finished_showdowns):
+    rows = client.get("/api/leaderboard").json()["rows"]
+    assert "BOTPRACTICE" not in {row["key"] for row in rows}
+
+
+def test_the_clock_is_off_by_default():
+    """Nothing runs on a timer any more; a showdown is an announced event."""
+    assert store.DEFAULT_SETTINGS["showdown_enabled"] is False
+
+
+def test_seeding_still_sees_rehearsals(finished_showdowns):
+    """Publishing and seeding are different questions. A practice run is hidden
+    from participants but still seeds the next practice run."""
+    assert Scheduler.current_seeding("practice") == {1: {"BOTPRACTICE": 100.0}}
+
+
+# --- deleting a board ------------------------------------------------------------
+
+
+def test_deleting_a_board_removes_it_and_its_results():
+    showdown = store.start_showdown({}, kind="mock")
+    store.finish_showdown(showdown, games=1, rows=[
+        {"key": "GONE", "variation": 1, "score": 1.0, "rank": 1},
+    ])
+    assert store.leaderboard(showdown)
+
+    removed = store.delete_showdown(showdown)
+    assert removed["id"] == showdown and removed["kind"] == "mock"
+    assert store.leaderboard(showdown) == []
+    assert showdown not in {r["id"] for r in store.published_showdowns()}
+    assert store.delete_showdown(showdown) is None, "deleting twice must be a no-op"
+
+
+def test_deleting_the_newest_board_makes_the_previous_one_current():
+    """What an organiser actually wants from delete: undo a bad round."""
+    first = store.start_showdown({}, kind="mock")
+    store.finish_showdown(first, games=1, rows=[
+        {"key": "KEEP", "variation": 1, "score": 5.0, "rank": 1},
+    ])
+    time.sleep(0.01)
+    second = store.start_showdown({}, kind="mock")
+    store.finish_showdown(second, games=1, rows=[
+        {"key": "OOPS", "variation": 1, "score": 9.0, "rank": 1},
+    ])
+    try:
+        board = {r["key"] for r in store.leaderboard(kinds=store.PUBLISHED_KINDS)
+                 if r["variation"] == 1}
+        assert board == {"OOPS"}
+
+        store.delete_showdown(second)
+        board = {r["key"] for r in store.leaderboard(kinds=store.PUBLISHED_KINDS)
+                 if r["variation"] == 1}
+        assert board == {"KEEP"}, "the round before it should be current again"
+        # And it is the standing the next mock seeds on.
+        assert Scheduler.current_seeding("mock") == {1: {"KEEP": 5.0}}
+    finally:
+        store.delete_showdown(first)
+
+
+def test_the_delete_endpoint_is_admin_only_and_audited(as_admin, client):
+    showdown = store.start_showdown({}, kind="mock")
+    store.finish_showdown(showdown, games=1, rows=[
+        {"key": "X", "variation": 1, "score": 1.0, "rank": 1},
+    ])
+    try:
+        assert client.delete(f"/api/admin/showdowns/{showdown}").status_code in (401, 403)
+        assert as_admin.delete(
+            f"/api/admin/showdowns/{showdown}", headers=ORIGIN
+        ).status_code == 200
+        assert as_admin.delete(
+            f"/api/admin/showdowns/{showdown}", headers=ORIGIN
+        ).status_code == 404
+        detail = " ".join(r["detail"] for r in store.audit_log(20)
+                          if r["action"] == "delete-showdown")
+        assert f"id={showdown}" in detail
+    finally:
+        store.delete_showdown(showdown)
+
+
+def test_a_running_showdown_cannot_be_deleted(as_admin, monkeypatch):
+    """Its result rows are still being written."""
+    showdown = store.start_showdown({}, kind="mock")
+    try:
+        monkeypatch.setattr("server.app.scheduler.running", True)
+        monkeypatch.setattr("server.app.scheduler.current_id", showdown)
+        response = as_admin.delete(f"/api/admin/showdowns/{showdown}", headers=ORIGIN)
+        assert response.status_code == 409
+        assert store.showdown_history(50)
+    finally:
+        store.delete_showdown(showdown)
+
+
+def test_run_now_works_while_the_clock_is_off(monkeypatch):
+    """`showdown_enabled` gates the timer, not the button.
+
+    Turning the clock off (there is no rolling board) also silently disabled
+    Run now: the scheduler loop skipped every due run when the setting was
+    false, manual or not, so nothing could be started at all.
+    """
+    sched = Scheduler()
+    assert sched._manual is False  # noqa: SLF001
+    sched.trigger_now("mock", (1,))
+    assert sched._manual is True, "a manual request must be distinguishable"  # noqa: SLF001
+    assert sched.state()["pending_kind"] == "mock"
+
+
+def test_the_clock_still_gates_unattended_runs():
+    """With no manual request pending, a disabled clock stays quiet."""
+    sched = Scheduler()
+    settings = dict(store.DEFAULT_SETTINGS)
+    assert settings["showdown_enabled"] is False
+    assert sched._manual is False  # noqa: SLF001

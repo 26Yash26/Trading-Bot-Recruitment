@@ -166,46 +166,41 @@ function emptyBoard(variation, filtered) {
     <div class="px-8 py-24 text-center">
       <p class="font-mono text-sm text-ink-3">Nothing on the board for variation ${esc(variation)} yet.</p>
       <p class="mx-auto mt-3 max-w-sm text-sm text-ink-2">
-        Bots appear here once the next showdown finishes.
+        Boards are published after each mock round and after the finals. Nothing runs
+        in between.
       </p>
       <a href="/submit" data-link class="btn-line mt-8">Submit a bot <span>→</span></a>
     </div>`;
 }
 
-/** The mock / final board picker, and the banner when one is being viewed. */
-function archiveBar(state, meta) {
+/** The board picker: mock rounds and the finals, newest first. */
+function boardPicker(state, meta) {
   const boards = state.published_showdowns || [];
   if (!boards.length) return "";
+
+  const newest = boards[0];
+  const label = (row) =>
+    `${row.kind === "final" ? "Final" : "Mock"} #${row.id}`;
 
   return `
     <div class="mt-6" data-fade>
       <div class="flex flex-wrap items-center gap-2">
         <span class="label mr-2">Boards</span>
-        <button data-board="live"
-                class="border-b-2 px-3 py-1.5 font-mono text-[11px] transition-colors ${
-                  meta ? "border-transparent text-ink-3 hover:text-ink" : "border-flame text-ink"
-                }">Live</button>
         ${boards
-          .map(
-            (row) => `
-          <button data-board="${row.id}"
+          .map((row) => {
+            // No id selected means the newest board, which is what the page
+            // already holds, so that chip is the one highlighted by default.
+            const selected = meta ? meta.id === row.id : row.id === newest.id;
+            return `
+          <button data-board="${row.id === newest.id ? "latest" : row.id}"
                   class="border-b-2 px-3 py-1.5 font-mono text-[11px] transition-colors ${
-                    meta && meta.id === row.id
+                    selected
                       ? "border-flame text-ink"
                       : "border-transparent text-ink-3 hover:text-ink"
-                  }">${esc(row.kind === "final" ? "Final" : "Mock")} #${esc(row.id)}</button>`
-          )
+                  }">${esc(label(row))}</button>`;
+          })
           .join("")}
       </div>
-      ${
-        meta
-          ? `<p class="mt-4 font-mono text-[10px] leading-relaxed text-flame">
-               Archived ${esc(meta.kind)} board from ${esc(relativeTime(meta.finished_at))},
-               ${esc(meta.games)} games. It is frozen: nothing here updates, and it does not
-               carry into the final standing.
-             </p>`
-          : ""
-      }
     </div>`;
 }
 
@@ -227,6 +222,10 @@ export async function renderLeaderboard(app) {
 
     const source = viewingArchive ? archived.rows : store.rows || [];
     const all = source.filter((row) => row.variation === activeVariation);
+    // Which board is on screen: the one picked, or the newest published.
+    const shown = viewingArchive
+      ? archived.meta
+      : (state.published_showdowns || [])[0] || null;
     const needle = query.trim().toLowerCase();
     const rows = (needle
       ? all.filter(
@@ -244,23 +243,35 @@ export async function renderLeaderboard(app) {
         <div>
           <span class="tag ${live ? "tag-live" : ""}" data-fade>
             <span class="dot ${live ? "animate-blip" : ""}"></span>
-            ${live ? "Showdown in progress" : "Board settled"}
+            ${
+              live
+                ? "Showdown in progress"
+                : shown
+                  ? `${shown.kind === "final" ? "Final" : "Mock round"} \u00b7 ${esc(relativeTime(shown.finished_at))}`
+                  : "No round played yet"
+            }
           </span>
           <h1 class="d1 mt-8 font-display">${revealLines(["Leader", "board"])}</h1>
           <p class="lede mt-8 max-w-xl" data-fade>
-            Every bot plays ${esc(state.iterations ?? 3)}
-            ${(state.iterations ?? 3) === 1 ? "iteration" : "iterations"} of
-            ${esc(state.num_rounds ?? 2000)} rounds in randomised groups of
-            ${esc(state.group_size ?? 20)}. Each of the ${esc(state.num_blocks ?? 4)} blocks is
-            scored against the rest of the group and the scores are summed, so who you were drawn
-            against matters far less than how you played.
+            There is no rolling board. Each mock round and the finals are played once,
+            published here, and kept. A showdown is ${esc(state.iterations ?? 5)}
+            ${(state.iterations ?? 5) === 1 ? "iteration" : "iterations"} of
+            ${esc(state.num_rounds ?? 2000)} rounds in groups of
+            ${esc(state.group_size ?? 20)}: each of the ${esc(state.num_blocks ?? 4)} blocks is
+            scored against the rest of your group and the scores are summed, so who you were
+            drawn against matters far less than how you played.
           </p>
-          <p class="mt-6 font-mono text-[11px] text-ink-3" data-fade>
-            last showdown ${esc(
-              state.last_showdown ? relativeTime(state.last_showdown.finished_at) : "never"
-            )}${state.last_showdown ? ` · ${esc(state.last_showdown.games)} games played` : ""}
-          </p>
-          ${archiveBar(state, viewingArchive ? archived.meta : null)}
+          ${
+            shown
+              ? `<p class="mt-6 font-mono text-[11px] text-ink-3" data-fade>
+                   ${esc(shown.games)} games played
+                   ${esc(relativeTime(shown.finished_at))}
+                 </p>`
+              : `<p class="mt-6 font-mono text-[11px] text-ink-3" data-fade>
+                   The first mock round has not run yet.
+                 </p>`
+          }
+          ${boardPicker(state, viewingArchive ? archived.meta : null)}
         </div>
 
         <div class="panel self-start p-6" data-fade>${renderCountdown({ size: "sm" })}</div>
@@ -367,7 +378,7 @@ export async function renderLeaderboard(app) {
     app.querySelectorAll("[data-board]").forEach((button) =>
       button.addEventListener("click", async () => {
         const value = button.dataset.board;
-        if (value === "live") {
+        if (value === "latest") {
           archivedId = null;
           paint();
           return;

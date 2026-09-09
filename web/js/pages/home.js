@@ -9,7 +9,6 @@ import {
   VARIATION_META,
   applyBarWidths,
   daysUntil,
-  describeInterval,
   enabledVariations,
   esc,
   formatDeadline,
@@ -196,8 +195,8 @@ function timeline(state) {
       final: true,
     },
     {
-      when: describeInterval(state.schedule?.interval_minutes),
-      what: "This practice board replays the whole field and is rewritten.",
+      when: "After each round",
+      what: "Results are published and kept. There is no board between rounds.",
       live: true,
     },
   ];

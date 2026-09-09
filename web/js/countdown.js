@@ -122,9 +122,9 @@ export function attachCountdown(root, getSchedule, { onElapsed } = {}) {
     }
 
     if (!schedule.enabled) {
-      showBanner("Paused");
-      setState("paused");
-      el.note.textContent = "the organisers have frozen the board";
+      showBanner("Scheduled");
+      setState("scheduled");
+      el.note.textContent = "rounds are announced, not run on a timer";
       el.bar.style.width = "0%";
       return;
     }

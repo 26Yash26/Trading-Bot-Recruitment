@@ -1,9 +1,10 @@
 """The showdown clock.
 
-Every ``interval_minutes`` (default 120) the whole field plays again and the
-leaderboard is replaced. ``next_run_at`` is persisted, so the countdown the
-website shows survives a restart or a redeploy instead of silently sliding
-forward every time the service bounces.
+There is no rolling board, so the clock is off by default: a showdown is an
+announced event, started from the admin page as a mock round or the finals. The
+clock remains for unattended rehearsals, which are never published.
+``next_run_at`` is persisted, so a countdown survives a restart or a redeploy
+instead of silently sliding forward every time the service bounces.
 
 The showdown itself is CPU-bound and lives in a worker thread, which in turn
 fans out to a process pool, the event loop stays free to serve the site while
@@ -56,6 +57,10 @@ class Scheduler:
         # is currently released", which is what the clock always does.
         self._pending_variations: tuple[int, ...] | None = None
         self.variations: tuple[int, ...] = ()
+        # An admin pressed Run now. `showdown_enabled` gates the CLOCK, not a
+        # deliberate request: with no rolling board the clock is off by default,
+        # and a disabled clock must not disable the button as well.
+        self._manual = False
 
     #, lifecycle ---------------------------------------------------------
 
@@ -98,6 +103,7 @@ class Scheduler:
         """
         self._pending_kind = store.normalise_kind(kind)
         self._pending_variations = tuple(variations) if variations else None
+        self._manual = True
         store.update_settings({"next_run_at": time.time()})
         if self._loop:
             self._loop.call_soon_threadsafe(self._wake.set)
@@ -120,7 +126,7 @@ class Scheduler:
             "kind": self.kind,
             "variations": list(self.variations),
             "pending_kind": self._pending_kind,
-            "enabled": bool(settings.get("showdown_enabled", True)),
+            "enabled": bool(settings.get("showdown_enabled", False)),
             "interval_minutes": int(settings.get("interval_minutes", 120)),
             "next_run_at": float(settings.get("next_run_at") or 0.0),
             "last_run_at": float(settings.get("last_run_at") or 0.0),
@@ -147,10 +153,11 @@ class Scheduler:
                 return
 
             settings = store.get_settings()
-            due = time.time() >= float(settings.get("next_run_at") or 0.0)
+            manual = self._manual
+            due = manual or time.time() >= float(settings.get("next_run_at") or 0.0)
             if not due:
                 continue
-            if not settings.get("showdown_enabled", True):
+            if not manual and not settings.get("showdown_enabled", False):
                 self._schedule_next(settings)
                 continue
 
@@ -159,6 +166,7 @@ class Scheduler:
             except Exception as exc:  # noqa: BLE001 - the clock must keep ticking
                 self.last_error = str(exc)[:300]
             finally:
+                self._manual = False
                 self._schedule_next()
                 events.publish("schedule", self.state())
 
@@ -190,17 +198,16 @@ class Scheduler:
         """Per variation: what each bot scored in the last run **of this kind**.
 
         The kind filter is the whole point. A balanced or finals iteration is
-        seeded on cumulative points, and with a practice showdown landing every
-        two hours the last finished board is almost always a practice one, so a
-        mock auction's snake seeding used to be built from a throwaway run
-        against throwaway bounds, silently. A mock seeds on the previous mock;
-        the final seeds on the previous final; practice seeds on practice.
+        seeded on cumulative points, and before this existed it read whatever
+        board had finished last, so a private rehearsal could silently decide
+        the groups of an announced round. A mock seeds on the previous mock, the
+        final on the previous final, and a rehearsal on the previous rehearsal.
 
         Within one run, iterations seed on each other, see
         `harness.evaluate.run_showdown`. This is only the starting standing.
         """
         seeding: dict[int, dict[str, float]] = {}
-        for row in store.leaderboard(kind=kind):
+        for row in store.leaderboard(kinds=(kind,)):
             seeding.setdefault(int(row["variation"]), {})[row["key"]] = float(
                 row.get("score", 0.0)
             )
@@ -286,7 +293,9 @@ class Scheduler:
                 f"variations={','.join(str(v) for v in variations)} "
                 f"games={result.games_played}",
             )
-            events.publish("leaderboard", store.leaderboard())
+            # Only published boards reach a browser, so a practice rehearsal
+            # pushes the unchanged public board rather than its own results.
+            events.publish("leaderboard", store.leaderboard(kinds=store.PUBLISHED_KINDS))
             return {"status": "done", "id": showdown_id, "games": result.games_played}
         except Exception as exc:  # noqa: BLE001
             store.finish_showdown(showdown_id, games=0, rows=[], error=str(exc)[:500])

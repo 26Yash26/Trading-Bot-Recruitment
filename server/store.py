@@ -1,8 +1,8 @@
 """SQLite persistence: users, sessions, submissions, showdowns, settings, audit.
 
 One small database, WAL mode, guarded by a lock, the write volume here is a few
-hundred submissions and a leaderboard every two hours, so anything bigger would
-be furniture. It lives in ``config.DATA_DIR``, deliberately outside the web root.
+hundred submissions and a board per round, so anything bigger would be
+furniture. It lives in ``config.DATA_DIR``, deliberately outside the web root.
 """
 
 from __future__ import annotations
@@ -95,17 +95,22 @@ CREATE TABLE IF NOT EXISTS audit (
 
 #: What a showdown was run for. The distinction is not cosmetic:
 #:
-#: ``practice``  the 2-hourly clock. Rewritten constantly, graded never.
-#: ``mock``      an announced mock auction. Its board is a published artefact and
-#:               must survive the next practice run.
+#: ``practice``  a private rehearsal. Never published, never graded.
+#: ``mock``      an announced mock round. Its board is published and kept.
 #: ``final``     the run after the deadline. The result.
 #:
 #: A ``balanced`` or ``finals`` iteration seeds on the standing so far, so it
 #: matters enormously which board that comes from. Seeding reads the latest
-#: finished run **of the same kind**, before this column existed it read
-#: whatever had finished last, which on a two-hourly clock is a practice run.
+#: finished run **of the same kind**. Before this column existed it read
+#: whatever had finished last, so a rehearsal could seed an announced round.
 SHOWDOWN_KINDS = ("practice", "mock", "final")
 DEFAULT_KIND = "practice"
+
+#: The kinds that are public. There is no rolling live board: the site shows
+#: mock rounds and the finals, and nothing else. A `practice` run is a private
+#: rehearsal for the organisers, useful for proving the pipeline before an
+#: announced round, and it never reaches a participant.
+PUBLISHED_KINDS = ("mock", "final")
 
 
 def normalise_kind(value: object) -> str:
@@ -118,7 +123,10 @@ def normalise_kind(value: object) -> str:
 # upgraded one agree on defaults.
 DEFAULT_SETTINGS: dict[str, Any] = {
     "submissions_open": True,
-    "showdown_enabled": True,
+    # There is no live board, so nothing runs on a timer. A showdown is an
+    # announced event: a mock round, or the finals. The clock stays here because
+    # an organiser may still want an unattended rehearsal, but it is off.
+    "showdown_enabled": False,
     "interval_minutes": 120,
     # Variations 3 and 4 are released after mock auction 1 (problem statement §2),
     # so they start switched off and the admin turns them on when the time comes.
@@ -486,26 +494,48 @@ def showdown_history(limit: int = 20, kind: str | None = None) -> list[dict]:
 def published_showdowns(limit: int = 30) -> list[dict]:
     """Finished mock and final runs, newest first, the archive the site offers.
 
-    Practice runs are excluded on purpose. There have been hundreds of them, they
-    are rewritten every two hours, and none of them means anything; an archive
-    that lists them buries the two boards that do.
+    Practice runs are excluded on purpose: they are private rehearsals, and an
+    archive that listed them would bury the rounds that count.
     """
+    holes = ",".join("?" * len(PUBLISHED_KINDS))
     rows = _query(
         "SELECT id, started_at, finished_at, games, kind FROM showdowns "
-        "WHERE status = 'done' AND kind IN ('mock', 'final') "
+        f"WHERE status = 'done' AND kind IN ({holes}) "
         "ORDER BY finished_at DESC LIMIT ?",
-        (limit,),
+        (*PUBLISHED_KINDS, limit),
     )
     return [dict(r) for r in rows]
 
 
-def latest_run_per_variation(kind: str | None = None) -> dict[int, int]:
+def delete_showdown(showdown_id: int) -> dict | None:
+    """Remove a showdown and every result it holds. Returns the row, or None.
+
+    A published board is a thing participants have seen, so this is deliberately
+    a separate, audited action rather than something a re-run does implicitly.
+    Deleting the newest mock makes the one before it current again, both on the
+    site and as the standing that the next mock seeds its balanced iterations on.
+    """
+    rows = _query("SELECT * FROM showdowns WHERE id = ?", (int(showdown_id),))
+    if not rows:
+        return None
+    with _lock:
+        conn = connect()
+        conn.execute("DELETE FROM results WHERE showdown_id = ?", (int(showdown_id),))
+        conn.execute("DELETE FROM showdowns WHERE id = ?", (int(showdown_id),))
+        conn.commit()
+    return dict(rows[0])
+
+
+def latest_run_per_variation(kinds: tuple[str, ...] | None = None) -> dict[int, int]:
     """For each variation, the id of the newest finished run that scored it.
 
     A showdown can be run for one variation at a time, which means the newest
     run overall does not necessarily hold a board for every variation. Taking
     the newest run per variation is what stops "run variation 1 again" from
     wiping variation 2 off the site.
+
+    ``kinds`` restricts which runs count. The public board passes
+    ``PUBLISHED_KINDS``; seeding passes the single kind it is seeding.
     """
     sql = (
         "SELECT r.variation AS variation, r.showdown_id AS showdown_id, "
@@ -514,9 +544,10 @@ def latest_run_per_variation(kind: str | None = None) -> dict[int, int]:
         "WHERE s.status = 'done'"
     )
     params: tuple = ()
-    if kind is not None:
-        sql += " AND s.kind = ?"
-        params = (normalise_kind(kind),)
+    if kinds:
+        wanted = tuple(normalise_kind(k) for k in kinds)
+        sql += f" AND s.kind IN ({','.join('?' * len(wanted))})"
+        params = wanted
 
     best: dict[int, tuple[int, float]] = {}
     for row in _query(sql, params):
@@ -527,16 +558,18 @@ def latest_run_per_variation(kind: str | None = None) -> dict[int, int]:
     return {variation: showdown for variation, (showdown, _) in best.items()}
 
 
-def leaderboard(showdown_id: int | None = None, kind: str | None = None) -> list[dict]:
+def leaderboard(
+    showdown_id: int | None = None, kinds: tuple[str, ...] | None = None
+) -> list[dict]:
     """Ranked rows, joined to the display name of each roll.
 
-    Naming a ``showdown_id`` returns exactly that board. With no id this is the
-    live board: for every variation, the newest finished run that scored it, of
-    ``kind`` if one is given. Those runs need not be the same run, because a
-    showdown can be played for one variation at a time.
+    Naming a ``showdown_id`` returns exactly that board. With no id it is, for
+    every variation, the newest finished run that scored it among ``kinds``.
+    Those runs need not be the same run, because a showdown can be played for
+    one variation at a time.
     """
     if showdown_id is None:
-        per_variation = latest_run_per_variation(kind)
+        per_variation = latest_run_per_variation(kinds)
         if not per_variation:
             return []
         ids = sorted(set(per_variation.values()))

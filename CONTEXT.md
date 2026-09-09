@@ -76,17 +76,26 @@ A showdown can also be run for **one variation at a time**. The live board takes
 each variation from the newest run that scored it, so replaying variation 1
 leaves variation 2 exactly as it was.
 
+**There is no live board.** The site shows the mock rounds and the finals, and
+nothing in between. Nothing runs on a timer: `showdown_enabled` is off, and a
+showdown is started from the admin page as an announced event.
+
 Every showdown is stamped with a **kind**, and it is not a label:
 
 | | `practice` | `mock` | `final` |
 |---|---|---|---|
-| Started by | the clock, and the Practice button | the Mock button | the Final button |
-| Board | rewritten by the next tick | archived and published | archived and published |
-| Seeds a balanced run from | the last practice run | the last mock | the last final |
+| What it is | a private rehearsal | an announced round | the run after the deadline |
+| Public? | never | published and kept | published and kept |
+| Seeds a balanced run from | the last rehearsal | the last mock | the last final |
 
-Mock and final boards stay reachable at `/api/leaderboard?showdown=<id>` and are
-listed in the leaderboard's *Boards* picker. Practice boards are deliberately
-not addressable by id.
+Published boards are listed in the leaderboard's *Boards* picker and reachable
+at `/api/leaderboard?showdown=<id>`. A practice run is invisible to
+participants: not on the board, not in the archive, not in `/api/state`. It
+exists so the pipeline can be proved before an announced round.
+
+Any showdown can be deleted from Admin, History. Deleting the newest mock makes
+the one before it current again, both on the site and as the standing the next
+mock seeds on. A running showdown cannot be deleted.
 
 ## Layout
 
