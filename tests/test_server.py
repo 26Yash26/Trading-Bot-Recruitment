@@ -302,6 +302,46 @@ class TestSubmitEndToEnd:
         assert "message" in body or "detail" in body
         assert "internal server error" not in str(body).lower()
 
+    def test_resubmitting_the_same_variation_is_never_met_with_a_bare_500(self, as_user):
+        """Regression: an accepted submission is written to disk and locked
+        read-only (`final_path.chmod(0o444)`) so it can't be tampered with
+        after the check passes. A second submission for the same roll and
+        variation reuses that exact path — resubmitting to fix a bug, or just
+        checking a different bot — and the overwrite raised an uncaught
+        `PermissionError` that FastAPI turned into a bare 500."""
+        before = store.get_settings()
+        try:
+            store.update_settings(
+                {"submissions_open": True, "variations": [1, 2], "submit_cooldown": 0}
+            )
+            first = as_user.post(
+                "/api/submit",
+                files={"file": ("ME24B152_1.py", self._bot_source())},
+                headers=ORIGIN,
+            )
+            assert first.status_code != 500
+
+            second = as_user.post(
+                "/api/submit",
+                files={"file": ("ME24B152_1.py", self._bot_source())},
+                headers=ORIGIN,
+            )
+        finally:
+            store.update_settings(
+                {
+                    "submissions_open": before["submissions_open"],
+                    "variations": before["variations"],
+                    "submit_cooldown": before["submit_cooldown"],
+                }
+            )
+
+        assert second.status_code != 500, (
+            f"resubmitting the same variation must never crash: {second.text[:300]}"
+        )
+        body = second.json()
+        assert "message" in body or "detail" in body
+        assert "internal server error" not in str(body).lower()
+
 
 # --- cross-origin --------------------------------------------------------------
 

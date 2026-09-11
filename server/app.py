@@ -533,6 +533,12 @@ async def api_submit(
             return JSONResponse({"ok": False, "message": result.reason}, status_code=400)
 
         final_path = config.SUBMISSIONS_DIR / f"{roll}_{variation}.py"
+        # A resubmission for the same roll+variation reuses this path, and the
+        # previous file was locked read-only below — unlock it first or the
+        # write raises PermissionError, which nothing downstream catches and
+        # which used to surface as a bare "Internal Server Error".
+        if final_path.exists():
+            final_path.chmod(0o600)
         final_path.write_text(source, encoding="utf-8")
         final_path.chmod(0o444)
 
