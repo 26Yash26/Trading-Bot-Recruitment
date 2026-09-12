@@ -99,34 +99,41 @@ def make_groups(
     *,
     seeding: dict[str, float] | None = None,
 ) -> list[list[BotSpec]]:
-    """Split the field into groups of ``group_size`` (problem statement §9).
+    """Split the field into ``ceil(n / group_size)`` groups of near-equal size.
 
-    Without ``seeding`` this is the random draw used by iterations 1 and 2. With
-    it, groups are strength-*balanced* rather than segregated: bots are sorted by
-    cumulative points and dealt out in a snake, 1 to G1, 2 to G2, ..., 20 to
-    G20, 21 back to G20, 22 to G19, so every group ends up roughly equal in
-    average strength, which is what makes the standardised scores comparable
-    across groups.
+    Both draws use the same partition, and that is the point. Sizes differ by at
+    most one, so no group is larger than ``group_size`` and every group is topped
+    up to a full table with the same number of fillers give or take one.
 
-    A trailing remainder smaller than half a group is folded into the previous
-    group rather than left to play mostly against fillers.
+    That matters because scoring standardises each block's profits *across the
+    whole table*, fillers included (they are only dropped from the results
+    afterwards). Fillers are deliberately naive, so a group carrying more of them
+    is standardised against a weaker field and its real bots score higher for it.
+    Splitting 54 into 20/20/14 hands six fillers to one group and none to the
+    other two; 18/18/18 gives every bot the same table to be measured against.
+
+    Without ``seeding`` the order is a shuffle, which is the blind draw
+    iterations 1 and 2 use. With it, bots are sorted by cumulative points and
+    dealt out in a snake, 1 to G1, 2 to G2, ..., back along the row, so groups
+    end up balanced on strength rather than segregated by it.
     """
+    count = max(1, math.ceil(len(specs) / group_size)) if specs else 1
+
     if seeding:
         ordered = sorted(specs, key=lambda s: -float(seeding.get(s.key, 0.0)))
-        count = max(1, math.ceil(len(ordered) / group_size))
-        groups: list[list[BotSpec]] = [[] for _ in range(count)]
-        for position, spec in enumerate(ordered):
-            row, column = divmod(position, count)
-            index = column if row % 2 == 0 else count - 1 - column
-            groups[index].append(spec)
-        return [g for g in groups if g] or [[]]
+    else:
+        ordered = list(specs)
+        rng.shuffle(ordered)
 
-    shuffled = list(specs)
-    rng.shuffle(shuffled)
-    groups = [shuffled[i:i + group_size] for i in range(0, len(shuffled), group_size)]
-    if len(groups) > 1 and len(groups[-1]) < max(2, group_size // 2):
-        groups[-2].extend(groups.pop())
-    return groups or [[]]
+    groups: list[list[BotSpec]] = [[] for _ in range(count)]
+    for position, spec in enumerate(ordered):
+        row, column = divmod(position, count)
+        # Snake, so a seeded deal alternates direction and the strongest bot in
+        # one row is paired with the weakest in the next. On a shuffled order it
+        # is simply an even deal.
+        index = column if row % 2 == 0 else count - 1 - column
+        groups[index].append(spec)
+    return [g for g in groups if g] or [[]]
 
 
 def play_group(

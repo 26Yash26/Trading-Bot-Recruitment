@@ -505,10 +505,15 @@ This \emph{balances} groups rather than segregating them: every group ends up
 with roughly the same average strength, which is what makes standardised scores
 comparable across groups.
 
-\textbf{Remainders.} Under random grouping, a trailing group smaller than half
-of $N$ is folded into the previous group rather than left to play mostly against
-filler bots. Snake seeding needs no such rule: it deals every bot into an
-existing group by construction.
+\textbf{Remainders.} Both draws deal the field into
+$G = \lceil \text{field size} / N \rceil$ groups, so group sizes differ by at
+most one and no group exceeds $N$. Random grouping shuffles first and snake
+seeding sorts first, but the partition has the same shape either way. This is
+deliberate: a short group is topped up with filler bots, and since a block is
+standardised across the whole table, a group carrying more fillers is measured
+against a weaker field. Splitting 54 bots into $20/20/14$ would hand six fillers
+to one group and none to the other two; $18/18/18$ gives every bot the same
+table to be measured against.
 
 \textbf{Filler bots.} A group short of $N$ players is topped up with the three
 published sample bots so that the highest-bid race is a real one. Fillers play
