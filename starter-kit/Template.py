@@ -22,7 +22,8 @@ class Bot:
             "num_players":      int,    # players at the start
             "num_rounds":       int,    # 2000
             "starting_capital": float,  # your capital for block 1 ONLY
-            "max_bid":          float,  # your capital at construction
+            "max_bid":          float,  # legal bid ceiling; each round the real
+                                        #   limit is obs["max_bid"] (== your capital)
         }
 
         State you put on `self` survives the whole 2000 rounds. It is NOT
