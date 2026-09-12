@@ -418,3 +418,68 @@ class TestBlockBoundsValidation:
             assert "137.5" not in client.get("/api/state").text
         finally:
             store.update_settings({"block_bounds": before})
+
+
+# --- deleting submissions by roll ----------------------------------------------
+
+
+def _seed_submission(roll: str, variation: int = 1):
+    """A minimal accepted submission row with a real file on disk."""
+    from server import config
+    config.ensure_dirs()
+    path = config.SUBMISSIONS_DIR / f"{roll}_{variation}.py"
+    path.write_text("class Bot:\n def __init__(s,c): pass\n def get_bid(s,o): return 1.0\n")
+    store.record_submission(
+        roll=roll, variation=variation, email=f"{roll.lower()}@smail.iitm.ac.in",
+        name=f"{roll}", filename=f"{roll}_{variation}.py", path=str(path),
+        sha256="x", size=10, status="accepted", message="", smoke_profit=1.0,
+    )
+    return path
+
+
+def test_delete_submissions_requires_admin(as_user):
+    assert as_user.post(
+        "/api/admin/delete-submissions", json={"rolls": ["ME24B152"]}, headers=ORIGIN
+    ).status_code == 403
+
+
+def test_delete_submissions_needs_rolls(as_admin):
+    assert as_admin.post(
+        "/api/admin/delete-submissions", json={"rolls": []}, headers=ORIGIN
+    ).status_code == 400
+
+
+def test_delete_submissions_all_missing_is_404(as_admin):
+    assert as_admin.post(
+        "/api/admin/delete-submissions", json={"rolls": ["ZZ99Z999"]}, headers=ORIGIN
+    ).status_code == 404
+
+
+def test_delete_submissions_removes_only_the_target(as_admin):
+    victim = _seed_submission("DL24V001")
+    bystander = _seed_submission("DL24B002")
+
+    response = as_admin.post(
+        "/api/admin/delete-submissions",
+        json={"rolls": ["dl24v001"]},  # lower-case on purpose
+        headers=ORIGIN,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["matched"] == ["DL24V001"]
+    assert body["rows_deleted"] >= 1 and body["files_deleted"] >= 1
+
+    rolls = {r["roll"] for r in store.active_submissions()}
+    assert "DL24V001" not in rolls and "DL24B002" in rolls
+    assert not victim.exists() and bystander.exists()
+
+
+def test_delete_submissions_rejects_cross_origin(as_admin):
+    _seed_submission("DL24X003")
+    response = as_admin.post(
+        "/api/admin/delete-submissions",
+        json={"rolls": ["DL24X003"]},
+        headers={"Origin": "https://evil.example"},
+    )
+    assert response.status_code == 403
+    assert "DL24X003" in {r["roll"] for r in store.active_submissions()}

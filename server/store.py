@@ -526,6 +526,68 @@ def delete_showdown(showdown_id: int) -> dict | None:
     return dict(rows[0])
 
 
+def _within_submissions_dir(path_str: str) -> Path | None:
+    """Resolve ``path_str`` and return it only if it is a file inside the
+    submissions directory. A stored path should always be, but resolving and
+    checking the prefix means a delete can never unlink anything elsewhere on
+    the box even if a row were somehow tampered with.
+    """
+    if not path_str:
+        return None
+    try:
+        target = Path(path_str).resolve()
+        base = config.SUBMISSIONS_DIR.resolve()
+    except (OSError, ValueError):
+        return None
+    if (target == base or base in target.parents) and target.is_file():
+        return target
+    return None
+
+
+def delete_submissions(rolls) -> dict:
+    """Hard-delete every submission for the given roll numbers.
+
+    For each roll this removes the database rows, the ``.py`` files on disk, and
+    the roll's entries in stored showdown results (so it also drops off the
+    leaderboard). Roll numbers not in the list are left completely untouched.
+
+    Distinct from banning: a ban keeps a roll out of future auctions
+    (``scheduler.collect_field`` skips banned rolls) but leaves the data in
+    place; this erases it. The caller audits the action.
+    """
+    targets = sorted({str(r).strip().upper() for r in rolls if str(r).strip()})
+    summary = {
+        "rolls": targets, "rows_deleted": 0, "files_deleted": 0,
+        "results_deleted": 0, "matched": [], "missing": [],
+    }
+    if not targets:
+        return summary
+
+    with _lock:
+        conn = connect()
+        for roll in targets:
+            files = conn.execute(
+                "SELECT path FROM submissions WHERE UPPER(roll) = ?", (roll,)
+            ).fetchall()
+            (summary["matched"] if files else summary["missing"]).append(roll)
+            for row in files:
+                target = _within_submissions_dir(row["path"])
+                if target is not None:
+                    try:
+                        target.unlink()
+                        summary["files_deleted"] += 1
+                    except OSError:
+                        pass
+            summary["rows_deleted"] += conn.execute(
+                "DELETE FROM submissions WHERE UPPER(roll) = ?", (roll,)
+            ).rowcount
+            summary["results_deleted"] += conn.execute(
+                "DELETE FROM results WHERE UPPER(key) = ?", (roll,)
+            ).rowcount
+        conn.commit()
+    return summary
+
+
 def latest_run_per_variation(kinds: tuple[str, ...] | None = None) -> dict[int, int]:
     """For each variation, the id of the newest finished run that scored it.
 

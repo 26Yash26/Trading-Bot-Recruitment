@@ -789,6 +789,44 @@ def admin_audit(admin: dict = Depends(require_admin)):
     return {"audit": store.audit_log()}
 
 
+@app.post("/api/admin/delete-submissions")
+async def admin_delete_submissions(request: Request, admin: dict = Depends(require_admin)):
+    """Hard-delete every submission for one or more roll numbers.
+
+    Removes their files, submission records and leaderboard entries, and nothing
+    for any other roll. Separate from banning (which only keeps a roll out of
+    future auctions). Irreversible, so it is its own audited action.
+    """
+    security.require_same_origin(request)
+    body = await request.json()
+    raw = body.get("rolls")
+    if isinstance(raw, str):
+        raw = [raw]
+    if not raw and body.get("roll"):
+        raw = [body["roll"]]
+    if not raw or not isinstance(raw, list):
+        raise HTTPException(status_code=400, detail="Provide one or more roll numbers.")
+
+    summary = store.delete_submissions(raw)
+    if not summary["matched"]:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No submissions found for: {', '.join(summary['rolls']) or '(none given)'}",
+        )
+
+    detail = (
+        f"{summary['rows_deleted']} rows / {summary['files_deleted']} files / "
+        f"{summary['results_deleted']} results for {', '.join(summary['matched'])}"
+    )
+    if summary["missing"]:
+        detail += f"; not found: {', '.join(summary['missing'])}"
+    store.audit(admin["email"], "delete-submissions", detail)
+
+    events.publish("leaderboard", store.leaderboard(kinds=store.PUBLISHED_KINDS))
+    events.publish("state", public_state())
+    return {"ok": True, **summary}
+
+
 @app.post("/api/admin/ban")
 async def admin_ban(request: Request, admin: dict = Depends(require_admin)):
     security.require_same_origin(request)

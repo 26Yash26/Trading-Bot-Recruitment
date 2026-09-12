@@ -551,6 +551,26 @@ function fieldTab(submissions, counts, settings) {
         ).join("")}
       </div>
 
+      <div class="hair-b px-6 py-4">
+        <label class="mb-2 block font-mono text-[10px] uppercase tracking-[0.16em] text-ink-3">
+          Delete submissions by roll number
+        </label>
+        <div class="flex flex-wrap gap-2">
+          <input data-delete-rolls-input type="text" spellcheck="false" autocapitalize="characters"
+                 placeholder="e.g. ME24B152, CS25B001"
+                 class="min-w-[16rem] flex-1 border border-line-2 bg-transparent px-3 py-1.5 font-mono text-sm outline-none focus:border-loss">
+          <button data-delete-rolls-btn
+                  class="border border-loss px-4 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-loss transition-colors hover:bg-loss/10">
+            Delete
+          </button>
+        </div>
+        <p class="mt-2 text-[11px] leading-relaxed text-ink-3">
+          Erases their files, submission records and leaderboard entries. Other rolls are untouched
+          and cannot be affected. Banning only stops future play; deleting removes the data too, so to
+          keep someone from resubmitting, ban as well.
+        </p>
+      </div>
+
       <div class="max-h-[30rem] overflow-y-auto">
         ${
           submissions.length
@@ -576,6 +596,11 @@ function fieldTab(submissions, counts, settings) {
                                : "border-line-2 text-loss hover:border-loss"
                            }">
               ${banned.has(row.roll) ? "Unban" : "Ban"}
+            </button>
+            <button data-delete-sub="${esc(row.roll)}" title="Delete all submissions for this roll"
+                    class="border border-line-2 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em]
+                           text-loss transition-colors hover:border-loss hover:bg-loss/10">
+              Del
             </button>
           </div>`
                 )
@@ -1107,6 +1132,44 @@ export async function renderAdmin(app) {
           toast(error.message, "error");
         }
       })
+    );
+
+    const deleteRolls = async (rolls) => {
+      const list = [...new Set(rolls.map((r) => r.trim().toUpperCase()).filter(Boolean))];
+      if (!list.length) {
+        toast("Enter at least one roll number.", "error");
+        return;
+      }
+      if (
+        !confirm(
+          `Permanently delete every submission for ${list.join(", ")}?\n\n` +
+            "Their files, records and leaderboard entries are erased. Other rolls are " +
+            "untouched. This cannot be undone."
+        )
+      )
+        return;
+      try {
+        const res = await api.admin.deleteSubmissions(list);
+        const parts = [`${res.rows_deleted} record(s)`, `${res.files_deleted} file(s)`];
+        if (res.results_deleted) parts.push(`${res.results_deleted} board entr${res.results_deleted === 1 ? "y" : "ies"}`);
+        const missing = res.missing?.length ? ` Not found: ${res.missing.join(", ")}.` : "";
+        toast(`Deleted ${parts.join(", ")}.${missing}`, "ok");
+        await load();
+        paint();
+      } catch (error) {
+        toast(error.message, "error");
+      }
+    };
+
+    app.querySelector("[data-delete-rolls-btn]")?.addEventListener("click", () => {
+      const input = app.querySelector("[data-delete-rolls-input]");
+      deleteRolls((input?.value || "").split(/[\s,]+/));
+    });
+    app.querySelector("[data-delete-rolls-input]")?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") app.querySelector("[data-delete-rolls-btn]")?.click();
+    });
+    app.querySelectorAll("[data-delete-sub]").forEach((button) =>
+      button.addEventListener("click", () => deleteRolls([button.dataset.deleteSub]))
     );
   };
 

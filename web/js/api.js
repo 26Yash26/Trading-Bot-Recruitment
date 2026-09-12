@@ -69,6 +69,8 @@ export const api = {
     audit: () => request("/admin/audit"),
     ban: (roll, banned) =>
       json("POST")("/admin/ban", { roll, banned }),
+    deleteSubmissions: (rolls) =>
+      json("POST")("/admin/delete-submissions", { rolls }),
   },
 };
 
