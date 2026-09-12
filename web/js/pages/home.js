@@ -177,17 +177,14 @@ function timeline(state) {
       done: true,
     },
     {
-      when: "Sat 12/09 · 12:00",
-      what: "Deadline for mock submissions of variations 1 and 2. Optional, and strongly recommended.",
-    },
-    {
       when: "Sat 12/09 · evening",
-      what: "Mock auction 1 runs on variations 1 and 2. Results published, and variations 3 and 4 released at the same time.",
-      accent: true,
+      what: "Mock auction 1 ran on variations 1 and 2. Results published, and variations 3 and 4 released with their templates.",
+      done: true,
     },
     {
-      when: "Mon 14/09 · EOD",
-      what: "Deadline for mock submissions of variations 3 and 4. Mock auction 2 runs the same night on all four.",
+      when: "Sun–Tue 13–15/09 · 23:59",
+      what: "Mock auction every night on all four variations, right through to the finals. Submit any time; whatever is in by 23:59 plays that night.",
+      accent: true,
     },
     {
       when: deadline ? `Wed ${deadline}` : "Wed 16/09 · 23:59",
@@ -285,7 +282,7 @@ export async function renderHome(app) {
           <div class="mt-10 flex flex-wrap items-center gap-3" data-fade>
             <a href="/submit" data-link class="btn-solid">Submit your bot <span>→</span></a>
             <a href="/rules" data-link class="btn-line">Read the problem</a>
-            <a href="/public/starter-kit.zip" class="btn-quiet" download>Starter kit ↓</a>
+            <a href="/api/starter-kit.zip" class="btn-quiet" download>Starter kit ↓</a>
           </div>
 
           ${
@@ -431,7 +428,7 @@ export async function renderHome(app) {
                class="btn inline-flex bg-void px-6 py-3 font-mono text-[11px] uppercase tracking-[0.18em] text-ink">
               Submit your bot →
             </a>
-            <a href="/public/starter-kit.zip" download
+            <a href="/api/starter-kit.zip" download
                class="btn inline-flex border border-current px-6 py-3 font-mono text-[11px] uppercase tracking-[0.18em] opacity-70 hover:opacity-100">
               Starter kit ↓
             </a>

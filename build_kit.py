@@ -44,6 +44,11 @@ REPO_ROOT = Path(__file__).resolve().parent
 KIT_DIR = REPO_ROOT / "starter-kit"
 LATE_DIR = REPO_ROOT / "late-kit"
 OUTPUT = REPO_ROOT / "public" / "starter-kit.zip"
+#: The released (all-four) kit lives under docs/, which nginx blocks, for the same
+#: reason the full scoring PDF does: it must be reachable only through the gated
+#: API route (`/api/starter-kit.zip`), never as a static file. `public/` is served
+#: unconditionally, so the released kit must not sit there.
+FULL_OUTPUT = REPO_ROOT / "docs" / "starter-kit-full.zip"
 
 #: Every file the kit is allowed to contain, relative to ``starter-kit/``.
 ALLOWED = (
@@ -197,7 +202,7 @@ def build(*, released: bool = False, output: Path | None = None) -> Path:
     ``output`` is for tests, which must be able to build both kits without
     touching the committed ``public/starter-kit.zip``.
     """
-    output = OUTPUT if output is None else Path(output)
+    output = (FULL_OUTPUT if released else OUTPUT) if output is None else Path(output)
     files = collect(released=released)
 
     if not released:

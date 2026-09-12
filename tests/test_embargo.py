@@ -354,3 +354,54 @@ def test_public_state_does_not_name_unreleased_variations(client):
     body = client.get("/api/state").text.lower()
     for phrase in GIVEAWAYS:
         assert phrase not in body
+
+
+# --- the released kit is gated exactly like the scoring PDF ---------------------
+
+FULL_KIT = REPO_ROOT / "docs" / "starter-kit-full.zip"
+
+
+def test_full_kit_is_committed_and_fresh(tmp_path):
+    """The released kit is served out of docs/ with no build step on the VM, so
+    it must be committed and match a fresh `--release-v3-v4` build."""
+    assert FULL_KIT.is_file(), (
+        "run `python build_kit.py --release-v3-v4` and commit docs/starter-kit-full.zip"
+    )
+    fresh = build_kit.build(released=True, output=tmp_path / "full.zip")
+    with zipfile.ZipFile(fresh) as built, zipfile.ZipFile(FULL_KIT) as shipped:
+        assert sorted(built.namelist()) == sorted(shipped.namelist())
+        stale = [n for n in built.namelist() if built.read(n) != shipped.read(n)]
+    assert not stale, "docs/starter-kit-full.zip is out of date: " + ", ".join(stale)
+
+
+def test_full_kit_is_never_a_static_file():
+    """Reachable only through the gated API, never as a static asset."""
+    assert not (REPO_ROOT / "public" / "starter-kit-full.zip").exists()
+    assert not (WEB_DIR / "starter-kit-full.zip").exists()
+    conf = (REPO_ROOT / "deploy" / "nginx-app.conf").read_text(encoding="utf-8")
+    blocked = re.search(r"location ~ \^/\(\?:([^)]+)\)", conf)
+    assert "docs" in blocked.group(1).split("|")
+
+
+def test_kit_gate_serves_two_variations_before_release(client):
+    store.update_settings({"variations": [1, 2]})
+    response = client.get("/api/starter-kit.zip")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/zip"
+    assert response.content == KIT_ZIP.read_bytes(), "pre-release should serve the v1&v2 kit"
+
+
+@pytest.mark.parametrize("variations", ([1, 2, 3], [1, 2, 4], [1, 2, 3, 4]))
+def test_kit_gate_serves_the_full_kit_once_released(client, variations):
+    store.update_settings({"variations": variations})
+    response = client.get("/api/starter-kit.zip")
+    assert response.status_code == 200
+    assert response.content == FULL_KIT.read_bytes()
+    assert response.content != KIT_ZIP.read_bytes()
+
+
+def test_kit_gate_reverts_if_a_variation_is_withdrawn(client):
+    store.update_settings({"variations": [1, 2, 3]})
+    assert client.get("/api/starter-kit.zip").content == FULL_KIT.read_bytes()
+    store.update_settings({"variations": [1, 2]})
+    assert client.get("/api/starter-kit.zip").content == KIT_ZIP.read_bytes()

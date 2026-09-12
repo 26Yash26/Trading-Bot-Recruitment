@@ -523,7 +523,7 @@ export async function renderRules(app) {
             </p>
             <div class="mt-8 flex flex-wrap gap-3" data-fade>
               <a href="/submit" data-link class="btn-solid">Submit a bot <span>→</span></a>
-              <a href="/public/starter-kit.zip" class="btn-line" download>Download the starter kit</a>
+              <a href="/api/starter-kit.zip" class="btn-line" download>Download the starter kit</a>
               ${
                 formUrl
                   ? `<a href="${esc(formUrl)}" class="btn-quiet" target="_blank" rel="noopener noreferrer">

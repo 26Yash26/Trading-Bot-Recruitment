@@ -392,6 +392,45 @@ def api_scoring_pdf():
     )
 
 
+PUBLIC_KIT = REPO_ROOT / "public" / "starter-kit.zip"
+FULL_KIT = DOCS_DIR / "starter-kit-full.zip"
+
+
+@app.get("/api/starter-kit.zip")
+def api_starter_kit():
+    """The starter kit, in the variant this stage of the event allows.
+
+    Same switch as `late.js` and the scoring PDF: before variations 3 and 4 are
+    released the two-variation kit is served, and the released kit, which carries
+    the V3 and V4 templates and their supplement, is not reachable at all. It is
+    committed under `docs/` (nginx-blocked) rather than `public/` for exactly the
+    reason the full scoring PDF is: a file under `public/` would be one filename
+    guess away from defeating the gate.
+
+    Repoint here rather than at `/public/starter-kit.zip` so the download follows
+    the release automatically and reverts if a variation is ever withdrawn.
+    """
+    settings = store.get_settings()
+    in_play = {int(v) for v in settings.get("variations", [])}
+    released = bool(in_play.intersection(LATE_VARIATIONS))
+
+    path = FULL_KIT if released else PUBLIC_KIT
+    if not path.is_file():
+        # The released kit missing is a deploy error, not a 404; fall back to the
+        # public kit rather than leave participants with no download at all.
+        path = PUBLIC_KIT
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Not found")
+
+    return FileResponse(
+        path,
+        media_type="application/zip",
+        filename="trading-bot-starter-kit.zip",
+        # The file behind this URL changes the moment a variation is released.
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 # --- submitting ----------------------------------------------------------------
 
 
