@@ -78,6 +78,37 @@ def test_numpy_is_available(run_bot):
     assert bid == pytest.approx(20.0)
 
 
+def test_numpy_bot_survives_without_a_user_namespace(tmp_path):
+    """A numpy bot must init on the tier the hardened service actually uses.
+
+    Regression: ``child.py`` set ``RLIMIT_NPROC = 0`` ("cannot fork"), but that
+    counts threads too, and numpy's BLAS backend starts a worker thread on
+    import. Under ``bwrap`` the uid is remapped so it slipped through, but the
+    live service runs under systemd hardening that blocks bwrap and falls back
+    to the ``unshare``/``plain`` tier, where every numpy submission died with
+    ``init failed: bot process exited``. Force ``plain`` so this is caught on any
+    machine, not just one without bwrap.
+    """
+    if sys.platform == "win32":
+        pytest.skip("sandbox child-process IPC is POSIX-only")
+
+    path = tmp_path / "bot.py"
+    path.write_text(
+        "import numpy as np\n"
+        "class Bot:\n"
+        "    def __init__(self, config): self.w = np.ones(3)\n"
+        "    def get_bid(self, obs): return float(np.dot(self.w, [obs['x'], 0, 0]))\n",
+        encoding="utf-8",
+    )
+    factory = SandboxedBotFactory(path, SandboxLimits(round_timeout=5.0, mem_mb=512), tier="plain")
+    try:
+        bot = factory(CONFIG)
+        assert not bot.disqualified, bot.disqualified_reason
+        assert bot.get_bid(dict(OBS)) == pytest.approx(40.0)
+    finally:
+        factory.close()
+
+
 # --- resource limits -----------------------------------------------------------
 
 

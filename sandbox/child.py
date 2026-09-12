@@ -29,6 +29,13 @@ import sys
 
 # --- Layer 2a: take stdout away from the bot before anything else runs ---------
 
+# Numeric libraries (numpy/scipy/sklearn) start a BLAS thread pool on import.
+# Pin them to a single thread on every isolation tier, before the bot is
+# imported, so a submission using numpy does not trip the process limit.
+for _v in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS",
+          "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
+    os.environ.setdefault(_v, "1")
+
 _PROTO_FD = os.dup(1)
 _devnull = os.open(os.devnull, os.O_WRONLY)
 os.dup2(_devnull, 1)
@@ -60,8 +67,11 @@ def _apply_rlimits(mem_mb: int, cpu_secs: int) -> None:
     _set(resource.RLIMIT_FSIZE, 0)                      # cannot write a single byte
     _set(resource.RLIMIT_NOFILE, 64)                    # no fd exhaustion
     _set(resource.RLIMIT_CORE, 0)                       # no core dumps
-    if hasattr(resource, "RLIMIT_NPROC"):
-        _set(resource.RLIMIT_NPROC, 0)                  # cannot fork
+    # NB: do NOT set RLIMIT_NPROC to 0 here -- it counts threads too, and
+    # numpy/scipy BLAS backends create worker threads on import, so a zero
+    # here breaks every bot that imports numpy (which the rules allow).
+    # Process count is bounded by the pid namespace (bwrap/docker) and by
+    # the service unit's TasksMax instead.
 
 
 def _shim_network() -> None:
