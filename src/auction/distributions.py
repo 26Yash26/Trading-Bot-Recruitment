@@ -72,22 +72,22 @@ class FixedSampler:
 #
 # Each block's [m_b, M_b] is drawn from two grids rather than typed in by hand:
 #
-#     m_b     in {10, 20, ..., 1000}        100 values, step 10
-#     range_b in {100, 200, ..., 10000}     100 values, step 100
+#     m_b     in {100, 110, ..., 1000}      91 values, step 10
+#     range_b in {100, 200, ..., 1000}      10 values, step 100
 #     M_b = m_b + range_b
 #
-# 10,000 combinations spanning two orders of magnitude in both the floor and the
-# width. That is the point: a bot cannot learn "the values are around 300" from
-# one showdown and carry it to the next, and it cannot assume the floor is zero.
-# Blocks vary in scale AND in width, so `x - m_b` and `M_b - x` are different
-# problems from one block to the next.
+# 910 combinations. Both grids span one order of magnitude. That is the point:
+# a bot cannot learn "the values are around 300" from one showdown and carry it
+# to the next, and it cannot assume the floor is zero. Blocks vary in scale AND
+# in width, so `x - m_b` and `M_b - x` are different problems from one block to
+# the next.
 #
 # A hand-typed schedule stayed possible (`bounds_mode = "fixed"`) because the
 # engine tests pin payoff arithmetic against known bounds, and because an admin
 # may want to reproduce a specific run.
 
-BLOCK_MIN_CHOICES = tuple(range(10, 1001, 10))
-BLOCK_RANGE_CHOICES = tuple(range(100, 10001, 100))
+BLOCK_MIN_CHOICES = tuple(range(100, 1001, 10))
+BLOCK_RANGE_CHOICES = tuple(range(100, 1001, 100))
 
 
 def draw_block_bounds(rng, num_blocks: int) -> list[tuple[float, float]]:

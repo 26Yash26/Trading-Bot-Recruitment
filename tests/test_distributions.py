@@ -211,16 +211,17 @@ class TestTheBoundsGrids:
     """The hidden bounds are drawn off two grids, not chosen by hand.
 
     The grids ARE published, participants are told the shape of the problem.
-    What is withheld is the seed, so which of the 10,000 blocks they face is
+    What is withheld is the seed, so which of the 910 blocks they face is
     unknowable in advance and unrepeatable between showdowns.
     """
 
     def test_the_grids_are_exactly_as_published(self):
         from src.auction.distributions import BLOCK_MIN_CHOICES, BLOCK_RANGE_CHOICES
 
-        assert BLOCK_MIN_CHOICES == tuple(range(10, 1001, 10))
-        assert BLOCK_RANGE_CHOICES == tuple(range(100, 10001, 100))
-        assert len(BLOCK_MIN_CHOICES) == len(BLOCK_RANGE_CHOICES) == 100
+        assert BLOCK_MIN_CHOICES == tuple(range(100, 1001, 10))
+        assert BLOCK_RANGE_CHOICES == tuple(range(100, 1001, 100))
+        assert len(BLOCK_MIN_CHOICES) == 91
+        assert len(BLOCK_RANGE_CHOICES) == 10
 
     def test_every_drawn_block_sits_on_the_grids(self):
         import random
@@ -247,11 +248,12 @@ class TestTheBoundsGrids:
 
         rng = random.Random(5)
         for _ in range(200):
-            assert all(lo >= 10.0 for lo, _ in draw_block_bounds(rng, 4))
+            assert all(lo >= 100.0 for lo, _ in draw_block_bounds(rng, 4))
 
     def test_scale_and_width_move_independently(self):
-        """Both grids span two orders of magnitude, and the floor does not
-        predict the width, otherwise there is one block shape, not 10,000."""
+        """The floor and the width each span one order of magnitude, and the
+        floor does not predict the width, otherwise there is one block shape,
+        not 910."""
         import random
         import statistics
 
@@ -262,8 +264,8 @@ class TestTheBoundsGrids:
         lows = [lo for lo, _ in blocks]
         widths = [hi - lo for lo, hi in blocks]
 
-        assert max(lows) / min(lows) >= 50
-        assert max(widths) / min(widths) >= 50
+        assert max(lows) / min(lows) >= 5
+        assert max(widths) / min(widths) >= 5
         # Near-zero correlation: the draws are independent.
         assert abs(statistics.correlation(lows, widths)) < 0.15
 

@@ -30,8 +30,8 @@ Public rules this file implements (all of them are in the problem statement):
   * 2000 rounds, four blocks of 500;
   * every block redraws the hidden value distribution AND your capital;
   * each block's bounds are drawn off two grids:
-        m_b     from {10, 20, ..., 1000}       (100 values, step 10)
-        range_b from {100, 200, ..., 10000}    (100 values, step 100)
+        m_b     from {100, 110, ..., 1000}      (91 values, step 10)
+        range_b from {100, 200, ..., 1000}     (10 values, step 100)
         M_b = m_b + range_b,  and x ~ U[m_b, M_b];
   * capital: kappa ~ U[0.5, 2.5], C = m_b + range_b * kappa;
   * V1 and V2: highest bid wins, ties all win and each collects the full
@@ -218,18 +218,18 @@ def settle_ranked(variation: int, values, bids, max_value: float, rng):
 
 # The two grids every block's hidden bounds are drawn from. These are the real
 # ones, the same code the competition runs. What you do NOT get is the seed,
-# so you cannot know which of the 10,000 combinations you will actually face.
-BLOCK_MIN_CHOICES = tuple(range(10, 1001, 10))        # m_b:     10 .. 1000, step 10
-BLOCK_RANGE_CHOICES = tuple(range(100, 10001, 100))   # range_b: 100 .. 10000, step 100
+# so you cannot know which of the 910 combinations you will actually face.
+BLOCK_MIN_CHOICES = tuple(range(100, 1001, 10))       # m_b:     100 .. 1000, step 10
+BLOCK_RANGE_CHOICES = tuple(range(100, 1001, 100))    # range_b: 100 .. 1000, step 100
 
 
 def draw_block_bounds(rng: random.Random) -> list[tuple[float, float]]:
     """Four hidden (m_b, M_b) pairs, different every seed.
 
-    m_b is NOT zero and the width is not fixed: blocks vary by two orders of
-    magnitude in both, so `x - m_b` and `M_b - x` are different problems from one
-    block to the next. A bot that assumes the values start at zero, or that they
-    are "about 100", will be caught out.
+    m_b is NOT zero and the width is not fixed: the floor and the width each
+    vary by one order of magnitude, so `x - m_b` and `M_b - x` are different
+    problems from one block to the next. A bot that assumes the values start at
+    zero, or that they are "about 500", will be caught out.
     """
     bounds = []
     for _ in range(NUM_ROUNDS // BLOCK_SIZE):
@@ -243,7 +243,7 @@ def starting_capital(rng: random.Random, block_min: float, block_max: float) -> 
     """Problem statement, capital resets: C = m_b + (M_b - m_b) * kappa.
 
     kappa is how many block-widths of headroom you start with. It is the same
-    idea whether the block spans [10, 10010] or [1000, 1100], which is the
+    idea whether the block spans [100, 1100] or [1000, 1100], which is the
     point, because those are completely different games.
     """
     kappa = rng.uniform(0.5, 2.5)

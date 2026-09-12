@@ -97,27 +97,27 @@ def test_capital_is_the_floor_plus_kappa_block_widths():
     kappa means "how many block-widths of headroom I start with", and that
     meaning has to hold whatever the block looks like. Two blocks can share a
     maximum of 1100 and be completely different games, [1000, 1100], where
-    every value sits within 10% of every other, against [10, 1100], which spans
-    two orders of magnitude. Scaling capital by M_b would hand out the same
+    every value sits within 10% of every other, against [100, 1100], which is
+    ten times as wide. Scaling capital by M_b would hand out the same
     bankroll in both; scaling by the width does not.
     """
     import random
 
     narrow = CapitalDraw().draw(random.Random(1), 1000.0, 1100.0)
-    wide = CapitalDraw().draw(random.Random(1), 10.0, 1100.0)
+    wide = CapitalDraw().draw(random.Random(1), 100.0, 1100.0)
 
     # Same seed, so the same kappa: the headroom above the floor is exactly
-    # kappa block-widths in each, and the two widths differ by 10.9x.
-    assert (wide - 10.0) / (narrow - 1000.0) == pytest.approx(1090.0 / 100.0)
+    # kappa block-widths in each, and the two widths differ by 10x.
+    assert (wide - 100.0) / (narrow - 1000.0) == pytest.approx(1000.0 / 100.0)
 
     kappa_narrow = (narrow - 1000.0) / 100.0
-    kappa_wide = (wide - 10.0) / 1090.0
+    kappa_wide = (wide - 100.0) / 1000.0
     assert kappa_narrow == pytest.approx(kappa_wide)
     assert 0.5 <= kappa_narrow <= 2.5
 
 
 def test_capital_is_always_positive_on_the_published_grids():
-    """m_b >= 10 and range >= 100, so the smallest draw is 10 + 100*0.5 = 60.
+    """m_b >= 100 and range >= 100, so the smallest draw is 100 + 100*0.5 = 150.
     That is what lets the formula drop the old floor and jitter terms."""
     import random
 
@@ -127,12 +127,12 @@ def test_capital_is_always_positive_on_the_published_grids():
     draw = CapitalDraw()
     smallest = draw.draw(rng, min(BLOCK_MIN_CHOICES),
                          min(BLOCK_MIN_CHOICES) + min(BLOCK_RANGE_CHOICES))
-    assert smallest >= 60.0
+    assert smallest >= 150.0
 
     for _ in range(500):
         lo = float(rng.choice(BLOCK_MIN_CHOICES))
         hi = lo + float(rng.choice(BLOCK_RANGE_CHOICES))
-        assert draw.draw(rng, lo, hi) >= 60.0
+        assert draw.draw(rng, lo, hi) >= 150.0
 
 
 # --- the engine's block loop ---------------------------------------------------

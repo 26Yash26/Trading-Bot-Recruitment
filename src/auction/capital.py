@@ -17,8 +17,8 @@ every bot roughly the same bankroll relative to the spread of values, which is
 the one thing the capital draw exists to vary. Scaling by the range keeps
 kappa's meaning constant: it is always "how many block-widths can I afford".
 
-It also removes two patches the old formula needed. m_b >= 10 and range >= 100,
-so the smallest possible capital is 10 + 100*0.5 = 60, comfortably positive,
+It also removes two patches the old formula needed. m_b >= 100 and range >= 100,
+so the smallest possible capital is 100 + 100*0.5 = 150, comfortably positive,
 with no floor term, and no additive jitter to keep a small block off zero.
 
 The bounds are parameters rather than constants because the admin console can

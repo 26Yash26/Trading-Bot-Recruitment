@@ -232,9 +232,9 @@ export async function renderRules(app) {
               independently:
             </p>
             <div class="panel mt-6 p-6 font-mono text-sm leading-relaxed md:p-8" data-fade>
-              <p>m<sub>b</sub> ~ {10, 20, 30, … 1000}
+              <p>m<sub>b</sub> ~ {100, 110, 120, … 1000}
                 <span class="text-ink-3">the block's hidden minimum, in steps of 10</span></p>
-              <p class="mt-2">range<sub>b</sub> ~ {100, 200, 300, … 10000}
+              <p class="mt-2">range<sub>b</sub> ~ {100, 200, 300, … 1000}
                 <span class="text-ink-3">its width, in steps of 100</span></p>
               <p class="mt-2">M<sub>b</sub> = m<sub>b</sub> + range<sub>b</sub>
                 <span class="text-ink-3">so xᵢ ~ U[m<sub>b</sub>, M<sub>b</sub>]</span></p>
@@ -242,10 +242,10 @@ export async function renderRules(app) {
               <p class="mt-2 text-flame">C⁽ᵇ'⁰⁾ᵢ = m<sub>b</sub> + range<sub>b</sub> · κᵢ</p>
             </div>
             <p class="mt-6 max-w-2xl text-sm leading-relaxed text-ink-2" data-fade>
-              Both grids hold 100 values, so there are <b class="text-ink">10,000</b> possible blocks
-              and they span two orders of magnitude in <em>both</em> the floor and the width. The
-              minimum is not zero, and a block as narrow as [1000, 1100] is as likely as one as wide
-              as [10, 10010], a bot that assumes values start at zero, or that they are "about a
+              The grids hold 91 and 10 values, so there are <b class="text-ink">910</b> possible
+              blocks; both the floor and the width span one order of magnitude. The
+              minimum is never below 100, and a block as narrow as [1000, 1100] is as likely as one as
+              wide as [100, 1100], a bot that assumes values start at zero, or that they are "about a
               hundred", is being measured on exactly that assumption.
             </p>
             <p class="mt-4 max-w-2xl text-sm leading-relaxed text-ink-2" data-fade>

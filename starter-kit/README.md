@@ -121,17 +121,17 @@ accepted file per variation is the one that plays.
 Every block draws its own hidden bounds, and neither is announced:
 
 ```
-m_b      from {10, 20, 30, ... 1000}        the block's minimum, step 10
-range_b  from {100, 200, 300, ... 10000}    its width, step 100
+m_b      from {100, 110, 120, ... 1000}     the block's minimum, step 10
+range_b  from {100, 200, 300, ... 1000}     its width, step 100
 M_b = m_b + range_b                         so x ~ U[m_b, M_b]
 ```
 
-That is 10,000 possible blocks, spanning two orders of magnitude in **both** the
-floor and the width. Three things follow, and they are the whole problem:
+That is 910 possible blocks. Both the floor and the width span one order of
+magnitude. Three things follow, and they are the whole problem:
 
 - **The minimum is not zero.** `x` never comes from `U[0, M]`. A block can be
   [1000, 1100], where every value sits within 10% of every other.
-- **The width is not fixed.** [10, 10010] and [1000, 1100] are both ordinary
+- **The width is not fixed.** [100, 1100] and [1000, 1100] are both ordinary
   blocks, and they are completely different games.
 - **Your capital scales with the width:** not the maximum, so `κ` always means
   the same thing: how many block-widths of headroom you start with.

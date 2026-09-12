@@ -25,9 +25,9 @@ written against the code.
   are hidden and change every block. Nobody is told when a block boundary
   happens. Detecting it is part of the problem.
 - **The bounds are drawn, not chosen.** Per block, independently:
-  `m_b ~ {10, 20, … 1000}` (step 10) and `range_b ~ {100, 200, … 10000}`
-  (step 100), with `M_b = m_b + range_b`. 10,000 possible blocks, spanning two
-  orders of magnitude in both the floor and the width. The minimum is never
+  `m_b ~ {100, 110, … 1000}` (step 10) and `range_b ~ {100, 200, … 1000}`
+  (step 100), with `M_b = m_b + range_b`. 910 possible blocks; both grids span
+  one order of magnitude. The minimum is never
   zero, and width is independent of scale. The **grids are published**; the seed
   is not, and every iteration draws its own schedule, so nothing is learnable
   across showdowns. `bounds_mode = "fixed"` takes a hand-typed schedule instead,
@@ -37,7 +37,7 @@ written against the code.
 - **Capital is redrawn at every block boundary**: `κ ~ U[0.5, 2.5]`,
   `capital = m_b + range_b · κ`. Anchored to the block's floor, scaled by its
   *width*, so κ always means "how many block-widths of headroom I start with".
-  Since `m_b ≥ 10` and `range_b ≥ 100` the smallest draw is 60, which is why the
+  Since `m_b ≥ 100` and `range_b ≥ 100` the smallest draw is 150, which is why the
   formula needs no floor term and no jitter. What you finished the previous
   block with does not carry over. Bankruptcy costs you the rest of *that block*
   only.

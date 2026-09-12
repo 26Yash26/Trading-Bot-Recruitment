@@ -85,10 +85,10 @@ other player's value, capital or identity.
    not a number, or not returned in time is filed as `0` for that round.
 2. **Blocks.** 2000 rounds split into 4 blocks of 500. At every boundary the value
    distribution is redrawn *and* every player's capital is redrawn.
-   The bounds come off two grids, `m_b ∈ {10, 20, … 1000}` (step 10) and
-   `range_b ∈ {100, 200, … 10000}` (step 100), with `M_b = m_b + range_b`, so
-   `x ~ U[m_b, M_b]`, the minimum is never zero, and the width varies by two
-   orders of magnitude. Capital is then `C = m_b + range_b · κ` with
+   The bounds come off two grids, `m_b ∈ {100, 110, … 1000}` (step 10) and
+   `range_b ∈ {100, 200, … 1000}` (step 100), with `M_b = m_b + range_b`, so
+   `x ~ U[m_b, M_b]` and the minimum is never zero. Capital is then
+   `C = m_b + range_b · κ` with
    `κ ~ U[0.5, 2.5]`: κ block-*widths* of headroom above the block's floor.
    What you finished the previous block with does not carry over.
 3. **Bankruptcy is per block.** A bot at zero capital sits out the rest of *that

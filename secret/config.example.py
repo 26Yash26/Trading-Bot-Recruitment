@@ -14,8 +14,8 @@ publication after the event.
 # ONLY CONSULTED WHEN THE ADMIN CONSOLE'S `bounds_mode` IS "fixed".
 #
 # The normal mode is "random": every iteration draws its own blocks off the
-# published grids, m_b from {10, 20, ... 1000} and range from
-# {100, 200, ... 10000}, M_b = m_b + range, seeded from MASTER_SEED below.
+# published grids, m_b from {100, 110, ... 1000} and range from
+# {100, 200, ... 1000}, M_b = m_b + range, seeded from MASTER_SEED below.
 # That is what stops a schedule being learned in one showdown and carried into
 # the next, and it is why these bounds are no longer the competition's main
 # secret; the seed is. A hand-written schedule here is for reproducing one

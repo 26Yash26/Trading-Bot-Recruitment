@@ -452,7 +452,7 @@ function secretsTab(settings, isolation) {
           <div class="mt-3 space-y-2">
             ${[
               ["random", "Drawn off the grids",
-               "m ∈ {10, 20, … 1000}, range ∈ {100, 200, … 10000}, M = m + range. A fresh schedule per iteration, from the seed below. 10,000 combinations, so nothing carries between showdowns."],
+               "m ∈ {100, 110, … 1000}, range ∈ {100, 200, … 1000}, M = m + range. A fresh schedule per iteration, from the seed below. 910 combinations, so nothing carries between showdowns."],
               ["fixed", "The schedule below",
                "Typed by hand. For reproducing one specific run, otherwise the same four blocks every iteration, which is learnable."],
             ]
@@ -888,7 +888,7 @@ export async function renderAdmin(app) {
     node.textContent =
       `Capital = m + (M − m)·κ, so κ is how many block-widths of headroom a bot ` +
       `starts with. Narrowest block ${describe(1000, 100)}; ` +
-      `widest ${describe(10, 10000)}.` +
+      `widest ${describe(100, 1000)}.` +
       (kappaHi < kappaLo ? "  ⚠ κ maximum is below κ minimum." : "");
   };
 
